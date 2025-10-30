@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useContext, useState } from "react";
 import { AuthContext } from "../context/AuthContext";
-import axios from "axios";
+import api from "../api/axios";
 
 function Register() {
   const [formData, setFormData] = useState({
@@ -24,7 +24,7 @@ function Register() {
     e.preventDefault();
     try {
       setError("");
-      const res = await axios.post("/auth/api/register", formData);
+      const res = await api.post("/auth/register", formData);
       login(res.data);
       navigate("/");
     } catch (err) {
@@ -52,6 +52,15 @@ function Register() {
             required
           />
           <input
+            type="email"
+            name="email"
+            placeholder="Enter the email"
+            value={formData.email}
+            onChange={handleChange}
+            className="w-full p-2 border rounded mb-3"
+            required
+          />
+          <input
             type="password"
             name="password"
             placeholder="Enter the password"
@@ -59,6 +68,14 @@ function Register() {
             onChange={handleChange}
             className="w-full p-2 border rounded mb-3"
             required
+          />
+          <input
+            type="password"
+            name="confirmPassword"
+            placeholder="Confirm password"
+            value={formData.confirmPassword}
+            onChange={handleChange}
+            className="w-full p-2 border rounded mb-3"
           />
           <select
             name="role"

@@ -11,19 +11,21 @@ import Register from "./pages/Register";
 
 function App() {
   return (
-    <AuthProvider>
-      <NavBar />
-      <div className="p-6">
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/seller/dashboard" element={<SellerDashBoard />} />
-          <Route path="/auction/:id" element={<AuctionDetails />} />
-          <Route path="/auction/create" element={<CreateAuction />} />
-        </Routes>
-      </div>
-    </AuthProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <NavBar />
+        <div className="p-6">
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/seller/dashboard" element={<SellerDashBoard />} />
+            <Route path="/auction/:id" element={<AuctionDetails />} />
+            <Route path="/auction/create" element={<CreateAuction />} />
+          </Routes>
+        </div>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
 

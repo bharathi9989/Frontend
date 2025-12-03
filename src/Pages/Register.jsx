@@ -1,21 +1,34 @@
-import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useContext, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { AuthContext } from "../context/AuthContext";
+import api from "../api/axios";
 
 function Register() {
+  const [error, setError] = useState("");
   const [form, setForm] = useState({
     name: "",
     email: "",
     password: "",
     role: "buyer",
   });
+  const { login } = useContext(AuthContext);
+  const navigate = useNavigate();
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.value]: e.target.value });
+    setForm({ ...form, [e.target.name]: e.target.value });
   };
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log(form);
+    try {
+      setError("");
+      const res = await api.post("/auth/register", form);
+      login(res.data);
+      navigate("/");
+    } catch (error) {
+      setError(error.response?.data?.message || "Registration Failed");
+    }
   };
+
   return (
     <div className="min-h-screen bg-linear-to-r from-purple-600 to-blue-600 flex items-center justify-center px-4">
       <div className="backdrop-blur-xl bg-white/10 border border-white/20 shadow-xl rounded-2xl p-8 w-full mzx-w-md animate-fadeIn">
@@ -70,6 +83,7 @@ function Register() {
             Register
           </button>
         </form>
+        {error && <p className="text-red-300 text-center mb-3">{error}</p>}
 
         <p className="text-white/80 text-center mt-4">
           Already have an account ?{" "}

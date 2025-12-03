@@ -1,6 +1,7 @@
 import React, { useContext, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext";
+import api from "../api/axios.js";
 
 function Login() {
   const [form, setForm] = useState({
@@ -8,11 +9,12 @@ function Login() {
     password: "",
   });
   const { login } = useContext(AuthContext);
-  const navigate = useNavigate;
+  const navigate = useNavigate();
   const [error, setError] = useState("");
 
   const handleChange = (e) => {
-    setForm(...form, [e.target.value], e.target.value);
+    e.preventDefault();
+    setForm({ ...form, [e.target.name]: e.target.value });
   };
 
   const handleSubmit = async (e) => {
@@ -33,9 +35,9 @@ function Login() {
           Welcome Back
         </h2>
 
-        <form className="space-y-5">
+        <form className="space-y-5" onSubmit={handleSubmit}>
           <input
-            email="email"
+            name="email"
             type="email"
             placeholder="Enter your Email Id"
             onChange={handleChange}

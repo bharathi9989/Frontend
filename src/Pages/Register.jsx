@@ -17,7 +17,7 @@ function Register() {
     console.log(form);
   };
   return (
-    <div className="min-h-screen bg-gradient-to-r from-purple-600 to-blue-600 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-linear-to-r from-purple-600 to-blue-600 flex items-center justify-center px-4">
       <div className="backdrop-blur-xl bg-white/10 border border-white/20 shadow-xl rounded-2xl p-8 w-full mzx-w-md animate-fadeIn">
         <h2 className="text-3xl font-bold text-center text-white mb-6">
           Create Account
@@ -71,7 +71,7 @@ function Register() {
           </button>
         </form>
 
-        <p>
+        <p className="text-white/80 text-center mt-4">
           Already have an account ?{" "}
           <Link
             to={"/login"}

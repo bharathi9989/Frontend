@@ -17,7 +17,7 @@ function Register() {
     console.log(form);
   };
   return (
-    <div className="min-h-screen bg-gradient-to-r form-purple-600 to-blue-600 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gradient-to-r from-purple-600 to-blue-600 flex items-center justify-center px-4">
       <div className="backdrop-blur-xl bg-white/10 border border-white/20 shadow-xl rounded-2xl p-8 w-full mzx-w-md animate-fadeIn">
         <h2 className="text-3xl font-bold text-center text-white mb-6">
           Create Account
@@ -28,7 +28,7 @@ function Register() {
             name="name"
             placeholder="Enter your name"
             onChange={handleChange}
-            className="w-full p-3 rounded-lg bg-white/20 text-white placeholder-gray-400 outline-none border border-white/20 focus:border-white/40 transition "
+            className="w-full p-3 rounded-lg bg-white/20 text-gray-900 placeholder-white/70 outline-none border border-white/20 focus:border-white/40 transition "
             required
           />
 
@@ -37,7 +37,7 @@ function Register() {
             type="email"
             placeholder="Email Address"
             onChange={handleChange}
-            className="w-full p-3 rounded-lg bg-white/20 text-white placeholder-gray-400 outline-none border border-white/20 focus:border-white/40 transition"
+            className="w-full p-3 rounded-lg bg-white/20 text-white placeholder-white/70 outline-none border border-white/20 focus:border-white/40 transition"
             required
           />
 
@@ -46,14 +46,14 @@ function Register() {
             type="password"
             placeholder="Password (min 6 characters)"
             onChange={handleChange}
-            className="w-full p-3 rounded-lg bg-white/20 text-white placeholder-gray-400 outline-none border border-white/20 focus:border-white/40 transition"
+            className="w-full p-3 rounded-lg bg-white/20 text-white placeholder-white/70 outline-none border border-white/20 focus:border-black transition"
             required
           />
 
           <select
             name="role"
             onChange={handleChange}
-            className="w-full p-3 rounded-lg bg-white/20 text-gray-400 outline-none border border-white/20 focus:border-gray-400 transition"
+            className="w-full p-3 rounded-lg bg-white/20 text-white/70 outline-none border border-white/20 focus:border-gray-400 transition"
           >
             <option value="buyer" className="text-black">
               Buyer

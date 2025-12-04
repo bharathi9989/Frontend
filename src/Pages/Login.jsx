@@ -31,7 +31,7 @@ function Login() {
   return (
     <div className="min-h-screen bg-linear-to-br from-purple-600 via-blue-600 to-blue-800 flex item-center justify-center p-6">
       <div className="w-full max-w-md bg-white/10 backdrop-blur-xl border border-white/20 shadow-2xl rounded-3xl p-8 animate-fadeIn">
-        <h2 className="text-3xl font-extrabold text-center text-white mb-6 tracking-wide">
+        <h2 className="text-3xl font-extrabold text-center text-white mb-6 mt-2 tracking-wide">
           Welcome Back
         </h2>
 

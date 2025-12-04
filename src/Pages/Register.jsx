@@ -31,7 +31,7 @@ function Register() {
 
   return (
     <div className="min-h-screen bg-linear-to-r from-purple-600 to-blue-600 flex items-center justify-center px-4">
-      <div className="backdrop-blur-xl bg-white/10 border border-white/20 shadow-xl rounded-2xl p-8 w-full mzx-w-md animate-fadeIn">
+      <div className="backdrop-blur-xl max-w-md bg-white/10 border border-white/20 shadow-xl rounded-2xl p-8 w-full mzx-w-md animate-fadeIn">
         <h2 className="text-3xl font-bold text-center text-white mb-6">
           Create Account
         </h2>

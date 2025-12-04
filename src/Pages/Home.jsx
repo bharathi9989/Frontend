@@ -1,9 +1,12 @@
-import React from 'react'
+import React from "react";
 
 function Home() {
   return (
-    <div>Home</div>
-  )
+    <div
+      className="min-h-screen bg-linear-to-br from-purple-600 via-blue-600 to-blue-800 
+    flex items-center justify-center p-6 animate-fadeIn"
+    ></div>
+  );
 }
 
-export default Home
+export default Home;

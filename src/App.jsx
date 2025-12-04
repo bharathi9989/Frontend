@@ -4,9 +4,10 @@ import Home from "./Pages/Home";
 import Login from "./Pages/Login";
 import Register from "./Pages/Register";
 import NavBar from "./components/NavBar";
-import SellerDashboard from "./Pages/SellerDashBoard";
+import SellerDashboard from "./Pages/SellerDashBoard.jsx";
 import ProductedRoute from "./components/ProductedRoutes";
-import CreateAuction from "./Pages/CreateAuction";
+import CreateAuction from "./Pages/CreateAuction.jsx";
+import BuyerAuctions from "./Pages/BuyerAuctions.jsx";
 
 function App() {
   return (
@@ -25,6 +26,7 @@ function App() {
           }
         />
         <Route path="/seller/create-auction" element={<CreateAuction />} />
+        <Route path="/buyer/auctions" element={<BuyerAuctions />} />
       </Routes>
     </BrowserRouter>
   );

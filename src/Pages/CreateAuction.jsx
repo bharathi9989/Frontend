@@ -26,9 +26,9 @@ export default function CreateAuction() {
           headers: { Authorization: `Bearer ${token}` },
         });
 
-        const sellerProducts = res.data.filter(
-          (p) => p.seller?._id === user._id
-        );
+        const sellerProducts = res.data
+          .filter((p) => p && p.seller && p.seller._id)
+          .filter((p) => p.seller._id === user._id);
 
         setProducts(sellerProducts);
       } catch (err) {
@@ -60,7 +60,7 @@ export default function CreateAuction() {
   };
 
   return (
-    <div className="min-h-screen flex justify-center items-center bg-gradient-to-br from-[#1e3c72] to-[#2a5298] py-10 px-4">
+    <div className="min-h-screen flex justify-center items-center bg-linear-to-br from-[#1e3c72] to-[#2a5298] py-10 px-4">
       <form
         onSubmit={handleSubmit}
         className="w-full max-w-lg bg-white/10 backdrop-blur-xl border border-white/20 shadow-xl rounded-2xl p-8 text-white animate-fadeIn"

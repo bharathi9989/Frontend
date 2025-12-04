@@ -40,7 +40,7 @@ function NavBar() {
               {/* Buyer Menu */}
               {user.role === "buyer" && (
                 <Link to="/buyer/auctions" className="hover:underline">
-                  <Auction></Auction>
+                  Auctions
                 </Link>
               )}
 
@@ -51,7 +51,7 @@ function NavBar() {
                   <Link to="/seller/dashboard" className="hover:underline">
                     Dashboard
                   </Link>
-                  <Link to="/auction/create" className="hover:underline">
+                  <Link to="/seller/create-auction" className="hover:underline">
                     Create Auction
                   </Link>
                 </>

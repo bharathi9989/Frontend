@@ -4,6 +4,8 @@ import Home from "./Pages/Home";
 import Login from "./Pages/Login";
 import Register from "./Pages/Register";
 import NavBar from "./components/NavBar";
+import SellerDashboard from "./Pages/SellerDashBoard";
+import ProductedRoute from "./components/ProductedRoutes"
 
 function App() {
   return (
@@ -13,6 +15,14 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route
+          path="/seller/dashboard"
+          element={
+            <ProductedRoute roles={["seller"]}>
+              <SellerDashboard />
+            </ProductedRoute>
+          }
+        />
       </Routes>
     </BrowserRouter>
   );

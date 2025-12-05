@@ -1,4 +1,4 @@
-import React, { useContext, useMemo, useState } from "react";
+import React, { useContext, useEffect, useMemo, useState } from "react";
 import { AuthContext } from "../context/AuthContext";
 import useProducts from "../hooks/useProducts";
 import ProductTable from "../components/ProductTable";
@@ -9,6 +9,10 @@ export default function SellerDashboard() {
   const { user } = useContext(AuthContext);
   const { products, loading, addProduct, updateProduct, deleteProduct } =
     useProducts();
+  
+  useEffect(() => {
+    if (!user) return; // Wait until user loads
+  }, [user,products]);
 
   // Filter only items created by this seller
   const myProducts = useMemo(

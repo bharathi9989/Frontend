@@ -8,6 +8,7 @@ import SellerDashboard from "./Pages/SellerDashBoard.jsx";
 import ProductedRoute from "./components/ProductedRoutes";
 import CreateAuction from "./Pages/CreateAuction.jsx";
 import BuyerAuctions from "./Pages/BuyerAuctions.jsx";
+import AuctionDetails from "./Pages/AuctionDetails.jsx";
 
 function App() {
   return (
@@ -27,6 +28,7 @@ function App() {
         />
         <Route path="/seller/create-auction" element={<CreateAuction />} />
         <Route path="/buyer/auctions" element={<BuyerAuctions />} />
+        <Route path="/auction/:id" element={<AuctionDetails />} />
       </Routes>
     </BrowserRouter>
   );

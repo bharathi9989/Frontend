@@ -8,6 +8,8 @@ export default function CreateAuction() {
   const navigate = useNavigate();
 
   const [products, setProducts] = useState([]);
+  const [message, setMessage] = useState("");
+
   const [form, setForm] = useState({
     productId: "",
     type: "traditional",
@@ -16,9 +18,10 @@ export default function CreateAuction() {
     startAt: "",
     endAt: "",
   });
-  const [message, setMessage] = useState("");
 
-  // Load seller products
+  // ------------------------------
+  // LOAD SELLER PRODUCTS
+  // ------------------------------
   useEffect(() => {
     const fetchProducts = async () => {
       try {
@@ -26,9 +29,16 @@ export default function CreateAuction() {
           headers: { Authorization: `Bearer ${token}` },
         });
 
-        const sellerProducts = res.data
-          .filter((p) => p && p.seller && p.seller._id)
-          .filter((p) => p.seller._id === user._id);
+        console.log("API DATA:", res.data);
+        console.log("USER ID:", user._id);
+
+        // FIX: Works for populated & non-populated seller
+        const sellerProducts = res.data.filter((p) => {
+          const sellerId = p?.seller?._id || p?.seller;
+          return sellerId === user._id;
+        });
+
+        console.log("SELLER PRODUCTS:", sellerProducts);
 
         setProducts(sellerProducts);
       } catch (err) {
@@ -37,12 +47,18 @@ export default function CreateAuction() {
     };
 
     fetchProducts();
-  }, []);
+  }, [token, user._id]);
 
+  // ------------------------------
+  // HANDLE INPUT CHANGE
+  // ------------------------------
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
+  // ------------------------------
+  // SUBMIT AUCTION
+  // ------------------------------
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -54,8 +70,8 @@ export default function CreateAuction() {
       setMessage("🎉 Auction created successfully!");
       setTimeout(() => navigate("/seller/dashboard"), 1500);
     } catch (err) {
-      setMessage("❌ Could not create auction.");
       console.log("Auction error:", err);
+      setMessage("❌ Could not create auction.");
     }
   };
 
@@ -85,6 +101,7 @@ export default function CreateAuction() {
           className="w-full p-3 rounded-xl bg-white/10 border border-white/20 mb-4 focus:ring-2 focus:ring-blue-400 outline-none"
         >
           <option value="">-- choose product --</option>
+
           {products.map((p) => (
             <option key={p._id} value={p._id}>
               {p.title}

@@ -1,16 +1,24 @@
+// src/api/axios.js
 import axios from "axios";
 
+const BASE = import.meta.env.VITE_API_URL || "http://localhost:1997";
+
 const api = axios.create({
-  baseURL: "http://localhost:1997/api",
+  baseURL: `${BASE}/api`, // matches your backend base '/api'
+  withCredentials: false,
 });
 
-// 🔥 Automatically attach token to every request
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+// Attach token from localStorage for every request
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      config.headers = config.headers || {};
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (err) => Promise.reject(err)
+);
 
 export default api;

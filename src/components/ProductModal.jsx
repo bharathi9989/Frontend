@@ -1,11 +1,9 @@
+// src/components/ProductModal.jsx
 import React, { useEffect, useState } from "react";
 
 /**
  * ProductModal props:
- * - open (bool)
- * - onClose()
- * - onSave(payload) => returns promise
- * - initial (object) optional for edit
+ * - open, onClose, onSave(payload, id), initial (optional product)
  */
 export default function ProductModal({ open, onClose, onSave, initial }) {
   const [form, setForm] = useState({
@@ -79,7 +77,7 @@ export default function ProductModal({ open, onClose, onSave, initial }) {
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <form
         onSubmit={submit}
-        className="relative z-10 w-full max-w-lg bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl p-6"
+        className="relative z-10 w-full max-w-lg bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl p-6"
       >
         <h3 className="text-xl font-semibold text-white mb-4">
           {initial ? "Edit Product" : "Add Product"}
@@ -92,14 +90,14 @@ export default function ProductModal({ open, onClose, onSave, initial }) {
           value={form.title}
           onChange={handleChange}
           placeholder="Title"
-          className="w-full p-3 rounded mb-3 bg-white/20 text-white outline-none"
+          className="w-full p-3 rounded mb-3 bg-white/10 text-white outline-none"
         />
         <textarea
           name="description"
           value={form.description}
           onChange={handleChange}
           placeholder="Description"
-          className="w-full p-3 rounded mb-3 bg-white/20 text-white outline-none"
+          className="w-full p-3 rounded mb-3 bg-white/10 text-white outline-none"
           rows={3}
         />
         <input
@@ -107,14 +105,14 @@ export default function ProductModal({ open, onClose, onSave, initial }) {
           value={form.images}
           onChange={handleChange}
           placeholder="Image URL"
-          className="w-full p-3 rounded mb-3 bg-white/20 text-white outline-none"
+          className="w-full p-3 rounded mb-3 bg-white/10 text-white outline-none"
         />
         <input
           name="category"
           value={form.category}
           onChange={handleChange}
           placeholder="Category"
-          className="w-full p-3 rounded mb-3 bg-white/20 text-white outline-none"
+          className="w-full p-3 rounded mb-3 bg-white/10 text-white outline-none"
         />
         <input
           name="inventoryCount"
@@ -123,7 +121,7 @@ export default function ProductModal({ open, onClose, onSave, initial }) {
           type="number"
           min="0"
           placeholder="Stock"
-          className="w-full p-3 rounded mb-4 bg-white/20 text-white outline-none"
+          className="w-full p-3 rounded mb-4 bg-white/10 text-white outline-none"
         />
 
         <div className="flex justify-end gap-2">

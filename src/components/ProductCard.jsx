@@ -1,4 +1,5 @@
 export default function ProductCard({ product, onEdit, onDelete }) {
+  const sellerId = product.seller && (product.seller._id || product.seller);
   return (
     <div className="bg-white/10 backdrop-blur-lg p-4 rounded-xl border border-white/10 shadow-lg text-white">
       {/* Image */}

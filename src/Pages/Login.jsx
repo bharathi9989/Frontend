@@ -22,7 +22,13 @@ function Login() {
     try {
       setError("");
       const res = await api.post("/auth/login", form);
-      login(res.data);
+      login({
+        user: {
+          ...res.data.user,
+          _id: res.data.user.id, // guarantee _id
+        },
+        token: res.data.token,
+      });
       navigate("/");
     } catch (error) {
       setError(error.response?.data?.message || "login failed");

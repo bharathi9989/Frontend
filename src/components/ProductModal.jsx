@@ -1,15 +1,12 @@
 // src/components/ProductModal.jsx
 import React, { useEffect, useState } from "react";
 
-/**
- * ProductModal props:
- * - open, onClose, onSave(payload, id), initial (optional product)
- */
 export default function ProductModal({ open, onClose, onSave, initial }) {
   const [form, setForm] = useState({
     title: "",
     description: "",
-    images: "",
+    imageFile: null, // File
+    imageUrl: "", // existing URL
     category: "",
     inventoryCount: 1,
   });
@@ -21,7 +18,8 @@ export default function ProductModal({ open, onClose, onSave, initial }) {
       setForm({
         title: initial.title || "",
         description: initial.description || "",
-        images: (initial.images && initial.images[0]) || "",
+        imageFile: null,
+        imageUrl: initial.images?.[0] || "",
         category: initial.category || "",
         inventoryCount: initial.inventoryCount ?? 1,
       });
@@ -29,7 +27,8 @@ export default function ProductModal({ open, onClose, onSave, initial }) {
       setForm({
         title: "",
         description: "",
-        images: "",
+        imageFile: null,
+        imageUrl: "",
         category: "",
         inventoryCount: 1,
       });
@@ -40,11 +39,14 @@ export default function ProductModal({ open, onClose, onSave, initial }) {
   if (!open) return null;
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm((s) => ({
-      ...s,
-      [name]: name === "inventoryCount" ? Number(value) : value,
-    }));
+    const { name, value, files } = e.target;
+    if (name === "imageFile") {
+      setForm((s) => ({ ...s, imageFile: files[0] || null }));
+    } else if (name === "inventoryCount") {
+      setForm((s) => ({ ...s, inventoryCount: Number(value) }));
+    } else {
+      setForm((s) => ({ ...s, [name]: value }));
+    }
   };
 
   const submit = async (e) => {
@@ -54,18 +56,29 @@ export default function ProductModal({ open, onClose, onSave, initial }) {
       setError("Title and category required");
       return;
     }
+
     setSaving(true);
     try {
-      const payload = {
-        title: form.title,
-        description: form.description,
-        images: form.images ? [form.images] : [],
-        category: form.category,
-        inventoryCount: form.inventoryCount,
-      };
+      // Use FormData for multipart upload when file present
+      const payload = new FormData();
+      payload.append("title", form.title);
+      payload.append("description", form.description);
+      payload.append("category", form.category);
+      payload.append("inventoryCount", String(form.inventoryCount));
+
+      // If imageFile present, append as 'image' (route expects field name 'image')
+      if (form.imageFile) {
+        payload.append("image", form.imageFile);
+      } else if (form.imageUrl) {
+        // fallback: allow sending image URL as plain field (server accepts)
+        payload.append("images", JSON.stringify([form.imageUrl]));
+      }
+
+      // onSave should handle FormData when necessary
       await onSave(payload, initial?._id);
       onClose();
     } catch (err) {
+      console.error("Product save failed:", err);
       setError(err?.message || "Save failed");
     } finally {
       setSaving(false);
@@ -92,6 +105,7 @@ export default function ProductModal({ open, onClose, onSave, initial }) {
           placeholder="Title"
           className="w-full p-3 rounded mb-3 bg-white/10 text-white outline-none"
         />
+
         <textarea
           name="description"
           value={form.description}
@@ -100,13 +114,35 @@ export default function ProductModal({ open, onClose, onSave, initial }) {
           className="w-full p-3 rounded mb-3 bg-white/10 text-white outline-none"
           rows={3}
         />
-        <input
-          name="images"
-          value={form.images}
-          onChange={handleChange}
-          placeholder="Image URL"
-          className="w-full p-3 rounded mb-3 bg-white/10 text-white outline-none"
-        />
+
+        <div className="mb-3">
+          <label className="block text-sm text-white/80 mb-1">Image</label>
+
+          {form.imageUrl && !form.imageFile && (
+            <img
+              src={form.imageUrl}
+              alt="preview"
+              className="w-40 h-40 object-cover rounded mb-2 border border-white/20"
+            />
+          )}
+
+          {form.imageFile && (
+            <img
+              src={URL.createObjectURL(form.imageFile)}
+              alt="preview"
+              className="w-40 h-40 object-cover rounded mb-2 border border-white/20"
+            />
+          )}
+
+          <input
+            name="imageFile"
+            type="file"
+            accept="image/*"
+            onChange={handleChange}
+            className="w-full text-white/80"
+          />
+        </div>
+
         <input
           name="category"
           value={form.category}
@@ -114,6 +150,7 @@ export default function ProductModal({ open, onClose, onSave, initial }) {
           placeholder="Category"
           className="w-full p-3 rounded mb-3 bg-white/10 text-white outline-none"
         />
+
         <input
           name="inventoryCount"
           value={form.inventoryCount}

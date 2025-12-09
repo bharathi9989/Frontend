@@ -8,26 +8,25 @@ import ProductModal from "../components/ProductModal";
 
 export default function SellerDashboard() {
   const { user } = useContext(AuthContext);
+
   const { products, loading, addProduct, updateProduct, deleteProduct } =
     useProducts();
 
-  // helper to normalize seller id
-  const sellerId = user?._id || user?.id || null;
-  // Filter only items created by this seller (supports seller object or id)
-  const myProducts = useMemo(
-    () =>
-      products.filter((p) => {
-        if (!p) return false;
-        // p.seller may be an object or a string id
-        const s = p.seller;
-        if (!s) return false;
-        if (typeof s === "string") return s === sellerId;
-        if (s._id) return s._id === sellerId;
-        if (s.id) return s.id === sellerId;
-        return false;
-      }),
-    [products, sellerId]
-  );
+  const sellerId = user?._id || user?.id;
+
+  // Filter only seller’s items (support string OR object)
+  const myProducts = useMemo(() => {
+    return products.filter((p) => {
+      if (!p || !p.seller) return false;
+
+      const s = p.seller;
+
+      if (typeof s === "string") return s === sellerId;
+      if (typeof s === "object" && s._id) return s._id === sellerId;
+
+      return false;
+    });
+  }, [products, sellerId]);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -43,30 +42,51 @@ export default function SellerDashboard() {
     setModalOpen(true);
   };
 
-  const doSave = async (payload, id) => {
+  // FINAL FIXED SAVE FUNCTION
+  const handleSave = async (payload, id) => {
     setMessage("");
+
+    let result;
+
     if (id) {
-      const res = await updateProduct(id, payload);
-      if (!res.ok) setMessage("Failed to update product");
-      else setMessage("Updated");
+      // UPDATE
+      result = await updateProduct(id, payload);
+
+      if (!result.ok) {
+        setMessage("❌ Failed to update product");
+        return;
+      }
+
+      setMessage("✅ Product updated successfully!");
     } else {
-      // attach seller id when creating
-      await addProduct(payload);
-      if (!res.ok) setMessage("Failed to add product");
-      else setMessage("Created");
+      // CREATE
+      result = await addProduct(payload);
+
+      if (!result.ok) {
+        setMessage("❌ Failed to add product");
+        return;
+      }
+
+      setMessage("✅ Product created successfully!");
     }
+
     setTimeout(() => setMessage(""), 2000);
   };
 
-  const doDelete = async (id) => {
-    if (!confirm("Delete product? This cannot be undone.")) return;
+  const handleDelete = async (id) => {
+    if (!confirm("Delete this product? This action cannot be undone.")) return;
+
     const res = await deleteProduct(id);
-    if (!res.ok) alert("Delete failed");
+
+    if (!res.ok) {
+      alert("Delete failed");
+    }
   };
 
   return (
     <div className="min-h-screen pt-28 bg-linear-to-br from-[#0f0c29] via-[#302b63] to-[#24243e] px-6">
       <div className="max-w-6xl mx-auto">
+        {/* HEADER */}
         <header className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-3xl font-bold text-white">Seller Dashboard</h1>
@@ -79,42 +99,46 @@ export default function SellerDashboard() {
             </div>
             <button
               onClick={openAdd}
-              className="bg-green-600 px-4 py-2 rounded-lg text-white shadow"
+              className="bg-green-600 px-4 py-2 rounded-lg text-white shadow-lg hover:bg-green-700 transition"
             >
               + Add Product
             </button>
           </div>
         </header>
 
+        {/* STATUS MESSAGE */}
         {message && (
           <div className="mb-4 p-3 bg-white/10 text-white rounded">
             {message}
           </div>
         )}
 
+        {/* PRODUCT LIST */}
         <div className="bg-white/10 backdrop-blur-xl border border-white/20 p-6 rounded-2xl shadow-xl">
+          {/* DESKTOP TABLE */}
           <div className="hidden md:block">
             {loading ? (
-              <div className="p-6 text-white">Loading...</div>
+              <div className="text-white p-6">Loading...</div>
             ) : (
               <ProductTable
                 products={myProducts}
-                onEdit={(p) => openEdit(p)}
-                onDelete={(id) => doDelete(id)}
+                onEdit={openEdit}
+                onDelete={handleDelete}
               />
             )}
           </div>
 
+          {/* MOBILE CARDS */}
           <div className="grid md:hidden grid-cols-1 gap-4">
             {loading ? (
-              <div className="p-6 text-white">Loading...</div>
+              <div className="text-white p-6">Loading...</div>
             ) : (
               myProducts.map((p) => (
                 <ProductCard
                   key={p._id}
                   product={p}
                   onEdit={() => openEdit(p)}
-                  onDelete={() => doDelete(p._id)}
+                  onDelete={() => handleDelete(p._id)}
                 />
               ))
             )}
@@ -122,11 +146,12 @@ export default function SellerDashboard() {
         </div>
       </div>
 
+      {/* PRODUCT MODAL */}
       <ProductModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         initial={editing}
-        onSave={doSave}
+        onSave={handleSave}
       />
     </div>
   );

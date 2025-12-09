@@ -1,4 +1,3 @@
-// src/Pages/CreateAuction.jsx
 import { useState, useEffect, useContext } from "react";
 import api from "../api/axios";
 import { AuthContext } from "../context/AuthContext";
@@ -10,6 +9,8 @@ export default function CreateAuction() {
 
   const [loadingUser, setLoadingUser] = useState(true);
   const [products, setProducts] = useState([]);
+  const [errors, setErrors] = useState({});
+  const [message, setMessage] = useState("");
 
   const [form, setForm] = useState({
     productId: "",
@@ -20,56 +21,68 @@ export default function CreateAuction() {
     endAt: "",
   });
 
-  const [message, setMessage] = useState("");
-
-  // STEP 1 — Wait until AuthContext loads the user
+  // STEP 1: Wait until user loads
   useEffect(() => {
     if (!user) return;
-    console.log("User Loaded:", user);
     setLoadingUser(false);
   }, [user]);
 
-  // STEP 2 — Load Products after user is available
+  // STEP 2: Fetch seller products
   useEffect(() => {
     if (loadingUser) return;
 
     async function loadProducts() {
       try {
-        console.log("Fetching products for user:", user._id);
-
         const res = await api.get("/products", {
           headers: { Authorization: `Bearer ${token}` },
         });
 
-        console.log("Backend returned products:", res.data);
-
-        // 🔥 Universal Filtering Logic — works for ALL types
         const sellerProducts = res.data.filter((p) => {
           const sellerId =
             typeof p.seller === "string" ? p.seller : p.seller?._id;
-
           return sellerId === user._id;
         });
 
-        console.log("Filtered seller products:", sellerProducts);
-
         setProducts(sellerProducts);
       } catch (err) {
-        console.log("❌ Error fetching products:", err);
+        console.log("❌ Error loading products:", err);
       }
     }
 
     loadProducts();
-  }, [loadingUser, user, token]);
+  }, [loadingUser]);
 
-  // Handle form changes
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+  // VALIDATION FUNCTION
+  const validate = () => {
+    let temp = {};
+
+    if (!form.productId) temp.productId = "Product selection required";
+    if (!form.startPrice) temp.startPrice = "Start price required";
+    if (!form.startAt) temp.startAt = "Start time required";
+    if (!form.endAt) temp.endAt = "End time required";
+
+    if (form.startAt && form.endAt) {
+      if (new Date(form.startAt) >= new Date(form.endAt)) {
+        temp.endAt = "End time must be after start time";
+      }
+    }
+
+    setErrors(temp);
+    return Object.keys(temp).length === 0;
   };
 
-  // Create Auction
+  const handleChange = (e) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+    setErrors({ ...errors, [e.target.name]: "" });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!validate()) {
+      setMessage("❌ Fix the highlighted errors");
+      return;
+    }
 
     try {
       await api.post("/auctions", form, {
@@ -79,118 +92,130 @@ export default function CreateAuction() {
       setMessage("🎉 Auction created successfully!");
       setTimeout(() => navigate("/seller/dashboard"), 1500);
     } catch (err) {
-      setMessage("❌ Could not create auction.");
-      console.log("Auction error:", err);
+      setMessage(err.response?.data?.message || "❌ Auction creation failed");
     }
   };
 
-  // UI while user loads
-  if (!user) {
+  if (!user)
     return (
-      <div className="text-center text-white text-2xl mt-20 animate-pulse">
-        Loading user...
-      </div>
+      <div className="text-white text-center text-3xl mt-20">Loading user…</div>
     );
-  }
 
   return (
-    <div className="min-h-screen flex justify-center items-center bg-linear-to-br from-[#1e3c72] to-[#2a5298] py-10 px-4">
+    <div className="min-h-screen flex justify-center items-center bg-linear-to-br from-[#141E30] to-[#243B55] py-10 px-4">
       <form
         onSubmit={handleSubmit}
         className="w-full max-w-lg bg-white/10 backdrop-blur-xl border border-white/20 shadow-2xl rounded-2xl p-8 text-white animate-fadeIn"
       >
-        <h2 className="text-3xl font-bold text-center mb-6 flex items-center justify-center gap-2">
-          📦 Create Auction
+        <h2 className="text-3xl font-bold text-center mb-6">
+          🎯 Create New Auction
         </h2>
 
         {message && (
-          <p className="text-center mb-4 bg-white/20 p-2 rounded-lg text-sm">
+          <p className="text-center mb-4 bg-white/20 p-3 rounded-lg text-sm shadow">
             {message}
           </p>
         )}
 
         {/* PRODUCT SELECT */}
-        <label className="block font-medium mb-2">Select Product</label>
-
-        {products.length === 0 ? (
-          <p className="text-red-300 mb-4">
-            ⚠ No products found for this seller. Add products first.
-          </p>
-        ) : (
-          <select
-            name="productId"
-            value={form.productId}
-            onChange={handleChange}
-            className="w-full p-3 rounded-xl bg-white/10 border border-white/20 mb-4 outline-none focus:ring-2 focus:ring-blue-300"
-            required
-          >
-            <option value="">-- choose product --</option>
-
-            {products.map((p) => (
-              <option key={p._id} value={p._id}>
-                {p.title}
-              </option>
-            ))}
-          </select>
+        <label className="font-medium">Select Product</label>
+        <select
+          name="productId"
+          value={form.productId}
+          onChange={handleChange}
+          className="w-full p-3 rounded-xl bg-white/10 border border-white/20 mt-1"
+        >
+          <option value="">-- choose product --</option>
+          {products.map((p) => (
+            <option key={p._id} value={p._id} className="text-black">
+              {p.title}
+            </option>
+          ))}
+        </select>
+        {errors.productId && (
+          <p className="text-red-300 text-sm mt-1">{errors.productId}</p>
         )}
 
-        {/* Auction Type */}
-        <label className="block font-medium mb-1">Auction Type</label>
+        {/* AUCTION TYPE */}
+        <label className="font-medium mt-4 block">Auction Type</label>
         <select
           name="type"
           value={form.type}
           onChange={handleChange}
-          className="w-full p-3 rounded-xl bg-white/10 border border-white/20 mb-4"
+          className="w-full p-3 rounded-xl bg-white/10 border border-white/20 mt-1"
         >
-          <option value="traditional">Traditional (highest wins)</option>
-          <option value="reverse">Reverse (lowest wins)</option>
-          <option value="sealed">Sealed Bid</option>
+          <option value="traditional" className="text-black">
+            Traditional (Highest Wins)
+          </option>
+          <option value="reverse" className="text-black">
+            Reverse (Lowest Wins)
+          </option>
+          <option value="sealed" className="text-black">
+            Sealed Bid
+          </option>
         </select>
 
-        {/* Start Price */}
-        <label>Start Price</label>
+        {/* START PRICE */}
+        <label className="font-medium mt-4 block">Start Price</label>
         <input
-          type="number"
           name="startPrice"
+          type="number"
           value={form.startPrice}
           onChange={handleChange}
-          className="w-full p-3 bg-white/10 border border-white/20 rounded-xl mb-4"
           placeholder="e.g. 500"
+          className={`w-full p-3 rounded-xl bg-white/10 border ${
+            errors.startPrice ? "border-red-400" : "border-white/20"
+          } mt-1`}
         />
+        {errors.startPrice && (
+          <p className="text-red-300 text-sm mt-1">{errors.startPrice}</p>
+        )}
 
-        {/* Min Increment */}
-        <label>Min Increment</label>
+        {/* MIN INCREMENT */}
+        <label className="font-medium mt-4 block">Min Increment</label>
         <input
-          type="number"
           name="minIncrement"
+          type="number"
           value={form.minIncrement}
           onChange={handleChange}
-          className="w-full p-3 bg-white/10 border border-white/20 rounded-xl mb-4"
-          placeholder="e.g. 100"
+          className="w-full p-3 rounded-xl bg-white/10 border border-white/20 mt-1"
         />
 
-        {/* Start Time */}
-        <label>Start Time</label>
+        {/* START TIME */}
+        <label className="font-medium mt-4 block">Start Time</label>
         <input
-          type="datetime-local"
           name="startAt"
+          type="datetime-local"
           value={form.startAt}
           onChange={handleChange}
-          className="w-full p-3 bg-white/10 border border-white/20 rounded-xl mb-4"
+          className={`w-full p-3 rounded-xl bg-white/10 border ${
+            errors.startAt ? "border-red-400" : "border-white/20"
+          } mt-1`}
         />
-
-        {/* End Time */}
-        <label>End Time</label>
+        {errors.startAt && (
+          <p className="text-red-300 text-sm mt-1">{errors.startAt}</p>
+        )}
+        {/* END TIME */}
+        <label className="font-medium mt-4 block">End Time</label>
         <input
-          type="datetime-local"
           name="endAt"
+          type="datetime-local"
           value={form.endAt}
           onChange={handleChange}
-          className="w-full p-3 bg-white/10 border border-white/20 rounded-xl mb-6"
+          className={`w-full p-3 rounded-xl bg-white/10 border ${
+            errors.endAt ? "border-red-400" : "border-white/20"
+          } mt-1`}
         />
+        {errors.endAt && (
+          <p className="text-red-300 text-sm mt-1">{errors.endAt}</p>
+        )}
 
-        {/* Submit */}
-        <button className="w-full py-3 bg-blue-500 rounded-xl font-bold hover:opacity-80 transition">
+        {/* SUBMIT BUTTON */}
+        <button
+          type="submit"
+          disabled={!validate}
+          className="w-full py-3 mt-6 bg-blue-600 hover:bg-blue-700 transition rounded-xl shadow-lg font-semibold disabled:opacity-40"
+        >
           Create Auction
         </button>
       </form>

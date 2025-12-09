@@ -1,12 +1,7 @@
-// src/hooks/useProducts.js
 import { useCallback, useEffect, useState, useContext } from "react";
 import api from "../api/axios";
 import { AuthContext } from "../context/AuthContext";
 
-/**
- * useProducts - central product state + helpers
- * returns consistent product shape: each product has _id, seller (object or id), title, etc.
- */
 export default function useProducts() {
   const { token } = useContext(AuthContext);
   const [products, setProducts] = useState([]);
@@ -23,7 +18,7 @@ export default function useProducts() {
           Authorization: `Bearer ${token}`,
         },
       });
-      // backend returns array in res.data
+
       const list = Array.isArray(res.data)
         ? res.data
         : res.data?.products || [];
@@ -43,30 +38,29 @@ export default function useProducts() {
     setSaving(true);
     setError(null);
 
-    // optimistic item
     const tempId = `temp_${Date.now()}`;
     const optimistic = {
-      ...payload,
+      ...(payload instanceof FormData ? {} : payload),
       _id: tempId,
       createdAt: new Date().toISOString(),
-      // ensure seller shape exists (could be id string)
-      seller: payload.seller,
+      seller: null,
     };
+    // if payload is FormData, we can't read fields easily; show placeholder
     setProducts((p) => [optimistic, ...p]);
 
     try {
+      const isForm = payload instanceof FormData;
       const res = await api.post("/products", payload, {
         headers: {
           Authorization: `Bearer ${token}`,
+          ...(isForm ? { "Content-Type": "multipart/form-data" } : {}),
         },
       });
-      // backend returns { message, product }
+
       const saved = res.data?.product || res.data;
-      // replace optimistic
       setProducts((list) => list.map((it) => (it._id === tempId ? saved : it)));
       return { ok: true, product: saved };
     } catch (err) {
-      // rollback
       setProducts((list) => list.filter((it) => it._id !== tempId));
       setError(err);
       return { ok: false, error: err };
@@ -83,12 +77,13 @@ export default function useProducts() {
       p.map((it) => (it._id === id ? { ...it, ...updates } : it))
     );
     try {
+      const isForm = updates instanceof FormData;
       const res = await api.put(`/products/${id}`, updates, {
         headers: {
-          Authorization: `Bearer ${token}`, // ✅ send token
+          Authorization: `Bearer ${token}`,
+          ...(isForm ? { "Content-Type": "multipart/form-data" } : {}),
         },
       });
-      // backend returns { message, product }
       const updated = res.data?.product || res.data;
       setProducts((p) => p.map((it) => (it._id === id ? updated : it)));
       return { ok: true, product: updated };
@@ -109,7 +104,7 @@ export default function useProducts() {
     try {
       await api.delete(`/products/${id}`, {
         headers: {
-          Authorization: `Bearer ${token}`, // ✅ send token
+          Authorization: `Bearer ${token}`,
         },
       });
       return { ok: true };

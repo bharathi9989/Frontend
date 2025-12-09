@@ -54,6 +54,9 @@ function NavBar() {
                   <Link to="/seller/create-auction" className="hover:underline">
                     Create Auction
                   </Link>
+                  <Link to="/auctions" className="hover:underline">
+                    Auctions
+                  </Link>
                 </>
               )}
               {/* Logout Button */}

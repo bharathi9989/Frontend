@@ -65,7 +65,7 @@ export default function SellerDashboard() {
   };
 
   return (
-    <div className="min-h-screen pt-28 bg-gradient-to-br from-[#0f0c29] via-[#302b63] to-[#24243e] px-6">
+    <div className="min-h-screen pt-28 bg-linear-to-br from-[#0f0c29] via-[#302b63] to-[#24243e] px-6">
       <div className="max-w-6xl mx-auto">
         <header className="flex items-center justify-between mb-6">
           <div>

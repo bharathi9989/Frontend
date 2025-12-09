@@ -137,7 +137,7 @@ export default function AuctionDetails() {
   const minRequired = computeMinRequired();
 
   return (
-    <div className="min-h-screen pt-28 p-6 bg-gradient-to-br from-[#0f1724] to-[#0b1220] text-white">
+    <div className="min-h-screen pt-28 p-6 bg-linear-to-br from-[#0f1724] to-[#0b1220] text-white">
       <div className="max-w-4xl mx-auto grid gap-6 md:grid-cols-2">
         {/* Left: Auction info + bid form */}
         <div className="bg-white/5 p-6 rounded-2xl border border-white/10">

@@ -7,7 +7,7 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Restore from localStorage on refresh
+  // Restore from localStorage
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
     const savedToken = localStorage.getItem("token");
@@ -15,16 +15,20 @@ export function AuthProvider({ children }) {
     if (savedUser && savedToken) {
       const parsed = JSON.parse(savedUser);
 
-      // 🔥 FIX: guarantee _id exists always
       const fixedUser = {
         ...parsed,
         _id: parsed._id || parsed.id,
+
+        // DEFAULT NOTIFICATION SETTINGS
+        notificationSettings: {
+          auctionEnd: parsed.notificationSettings?.auctionEnd ?? true,
+          newBid: parsed.notificationSettings?.newBid ?? true,
+        },
       };
 
       setUser(fixedUser);
       setToken(savedToken);
 
-      // rewrite corrected user back into storage
       localStorage.setItem("user", JSON.stringify(fixedUser));
 
       console.log("Auth Restored:", fixedUser);
@@ -33,11 +37,17 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, []);
 
-  // LOGIN FUNCTION (MANDATORY FIX)
+  // LOGIN FUNCTION
   const login = (data) => {
     const fixedUser = {
       ...data.user,
-      _id: data.user._id || data.user.id, // 🔥 ensure _id exists
+      _id: data.user._id || data.user.id,
+
+      // DEFAULT NOTIFICATION SETTINGS
+      notificationSettings: {
+        auctionEnd: data.user.notificationSettings?.auctionEnd ?? true,
+        newBid: data.user.notificationSettings?.newBid ?? true,
+      },
     };
 
     setUser(fixedUser);
@@ -45,14 +55,15 @@ export function AuthProvider({ children }) {
 
     localStorage.setItem("user", JSON.stringify(fixedUser));
     localStorage.setItem("token", data.token);
-
-    console.log("User saved:", fixedUser);
   };
 
   const logout = () => {
     setUser(null);
     setToken(null);
     localStorage.clear();
+
+    // FORCE refresh to update NavBar correctly
+    window.location.href = "/";
   };
 
   if (loading) return <div className="text-center p-8">Loading...</div>;

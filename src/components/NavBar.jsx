@@ -32,16 +32,30 @@ export default function NavBar() {
 
           {user && (
             <>
-              {user.role === "buyer" && (<>
-                <NavItem to="/buyer/auctions" label="Auctions" />
-                <NavItem to="/buyer/profile" label="Profile" />
-              </>)}
+              {user.role === "buyer" && (
+                <>
+                  <NavItem to="/buyer/auctions" label="Auctions" />
+                  <NavItem to="/buyer/profile" label="Profile" />
+                </>
+              )}
 
               {user.role === "seller" && (
                 <>
-                  <NavItem to="/seller/dashboard" label="Dashboard" />
-                  <NavItem to="/seller/create-auction" label="Create Auction" />
-                  <NavItem to="/buyer/auctions" label="Marketplace" />
+                  <NavItem
+                    to="/seller/dashboard"
+                    label="Dashboard"
+                    className="hover:underline"
+                  />
+                  <NavItem
+                    to="/seller/create-auction"
+                    label="Create Auction"
+                    className="hover:underline"
+                  />
+                  <NavItem
+                    to="/seller/auctions"
+                    label="Marketplace"
+                    className="hover:underline"
+                  />
                 </>
               )}
 
@@ -105,7 +119,7 @@ export default function NavBar() {
                       onClick={toggleMenu}
                     />
                     <NavItem
-                      to="/buyer/auctions"
+                      to="/seller/auctions"
                       label="Marketplace"
                       onClick={toggleMenu}
                     />

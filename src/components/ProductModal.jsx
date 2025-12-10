@@ -48,6 +48,7 @@ export default function ProductModal({ open, onClose, onSave, initial }) {
       setForm((s) => ({ ...s, [name]: value }));
     }
   };
+  
 
   const submit = async (e) => {
     e.preventDefault();

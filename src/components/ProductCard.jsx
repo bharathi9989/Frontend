@@ -29,6 +29,14 @@ export default function ProductCard({ product, onEdit, onDelete }) {
           >
             Edit
           </button>
+          {product.status === "unsold" && (
+            <button
+              onClick={() => onRelist(product)}
+              className="px-3 py-2 bg-blue-600 text-white rounded"
+            >
+              Re-List Product
+            </button>
+          )}
           <button
             onClick={onDelete}
             className="px-3 py-1 bg-red-500 rounded-md"

@@ -5,9 +5,10 @@ import useProducts from "../hooks/useProducts";
 import ProductTable from "../components/ProductTable";
 import ProductCard from "../components/ProductCard";
 import ProductModal from "../components/ProductModal";
+import NotificationModal from "../components/NotificationModal";
 
 export default function SellerDashboard() {
-  const { user } = useContext(AuthContext);
+  const { user, token } = useContext(AuthContext);
 
   const { products, loading, addProduct, updateProduct, deleteProduct } =
     useProducts();
@@ -31,6 +32,9 @@ export default function SellerDashboard() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [message, setMessage] = useState("");
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [relistModalOpen, setRelistModalOpen] = useState(false);
+  const [relistProductData, setRelistProductData] = useState(null);
 
   const openAdd = () => {
     setEditing(null);
@@ -40,6 +44,11 @@ export default function SellerDashboard() {
   const openEdit = (product) => {
     setEditing(product);
     setModalOpen(true);
+  };
+
+  const onRelist = (product) => {
+    setRelistProductData(product);
+    setRelistModalOpen(true);
   };
 
   // FINAL FIXED SAVE FUNCTION
@@ -103,6 +112,12 @@ export default function SellerDashboard() {
             >
               + Add Product
             </button>
+            <button
+              onClick={() => setNotifOpen(true)}
+              className="bg-blue-500 px-4 py-2 rounded-lg text-white shadow hover:bg-blue-700"
+            >
+              🔔 Notification Settings
+            </button>
           </div>
         </header>
 
@@ -152,6 +167,14 @@ export default function SellerDashboard() {
         onClose={() => setModalOpen(false)}
         initial={editing}
         onSave={handleSave}
+      />
+
+      <NotificationModal
+        open={notifOpen}
+        onClose={() => setNotifOpen(false)}
+        settings={user?.notificationSettings}
+        token={token}
+        reload={() => window.location.reload()}
       />
     </div>
   );

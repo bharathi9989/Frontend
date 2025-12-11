@@ -2,15 +2,22 @@
 import React, { useContext, useEffect, useMemo, useState } from "react";
 import { AuthContext } from "../context/AuthContext";
 import api from "../api/axios";
-import {
-  HiClock,
-  HiCheckCircle,
-  HiOutlineClock,
-  HiRefresh,
-  HiX,
-  HiPlus,
-} from "react-icons/hi"; // hi2 set if available; fallback to hi if not
+import * as Icons from "react-icons/hi";
 import { formatDistanceToNowStrict } from "date-fns";
+
+/**
+ * SellerAuctions.jsx
+ * - Robust seller auctions page with:
+ *   • resilient API shapes handling
+ *   • live flip-style countdown per auction (desktop & mobile)
+ *   • danger mode (last 10 minutes)
+ *   • re-list modal (POST /auctions/relist)
+ *   • close-now (PUT /auctions/:id/status)
+ *
+ * Drop-in replacement for your current file.
+ */
+
+/* ---------------------- Utilities ---------------------- */
 
 const normalizeSellerId = (value) => {
   if (!value) return null;
@@ -20,32 +27,32 @@ const normalizeSellerId = (value) => {
 };
 
 const isAuctionLive = (a, now = new Date()) => {
-  // Prefer explicit status if backend sets it
-  if (a?.status === "live") return true;
-  if (a?.status === "ended" || a?.status === "closed") return false;
-
-  // Fallback to time check
-  const start = a?.startAt ? new Date(a.startAt) : null;
-  const end = a?.endAt ? new Date(a.endAt) : null;
+  if (!a) return false;
+  if (a.status === "live") return true;
+  if (a.status === "closed" || a.status === "ended") return false;
+  const start = a.startAt ? new Date(a.startAt) : null;
+  const end = a.endAt ? new Date(a.endAt) : null;
   if (!start || !end) return false;
   return start <= now && end >= now;
 };
 
 const isAuctionUpcoming = (a, now = new Date()) => {
-  if (a?.status === "upcoming") return true;
-  const start = a?.startAt ? new Date(a.startAt) : null;
+  if (!a) return false;
+  if (a.status === "upcoming") return true;
+  const start = a.startAt ? new Date(a.startAt) : null;
   if (!start) return false;
   return start > now;
 };
 
 const isAuctionEnded = (a, now = new Date()) => {
-  if (a?.status === "closed" || a?.status === "ended") return true;
-  const end = a?.endAt ? new Date(a.endAt) : null;
+  if (!a) return false;
+  if (a.status === "closed" || a.status === "ended") return true;
+  const end = a.endAt ? new Date(a.endAt) : null;
   if (!end) return false;
   return end < now;
 };
 
-/* ---------- Components ---------- */
+/* ---------------------- Small UI bits ---------------------- */
 
 function Badge({ children, color = "bg-gray-300 text-black" }) {
   return (
@@ -66,7 +73,94 @@ function SmallSpinner({ size = 4 }) {
   );
 }
 
-/* Re-list modal: create new auction quickly for a product */
+/* ---------------------- Countdown Hook & Flip UI ---------------------- */
+
+/**
+ * useCountdown(endAt)
+ * returns hh:mm:ss string (updates every second)
+ */
+function useCountdown(endAt) {
+  const [timeLeft, setTimeLeft] = useState("");
+
+  useEffect(() => {
+    if (!endAt) {
+      setTimeLeft("");
+      return;
+    }
+
+    let mounted = true;
+    const update = () => {
+      if (!mounted) return;
+      const now = new Date();
+      const end = new Date(endAt);
+      const diff = end.getTime() - now.getTime();
+
+      if (diff <= 0) {
+        setTimeLeft("00:00:00");
+        return;
+      }
+
+      const totalSec = Math.floor(diff / 1000);
+      const hours = String(Math.floor(totalSec / 3600)).padStart(2, "0");
+      const mins = String(Math.floor((totalSec % 3600) / 60)).padStart(2, "0");
+      const secs = String(totalSec % 60).padStart(2, "0");
+
+      setTimeLeft(`${hours}:${mins}:${secs}`);
+    };
+
+    update();
+    const id = setInterval(update, 1000);
+    return () => {
+      mounted = false;
+      clearInterval(id);
+    };
+  }, [endAt]);
+
+  return timeLeft;
+}
+
+/**
+ * FlipTimer - simple flip-like blocks for H:M:S
+ * danger -> when last 10 minutes show red pulse
+ */
+function FlipTimer({ time }) {
+  if (!time) return null;
+  const [h, m, s] = time.split(":");
+  const isDanger = Number(h) === 0 && Number(m) < 10;
+
+  const Block = ({ val, label }) => (
+    <div className="flex flex-col items-center mx-1">
+      <div
+        className={`relative w-14 h-16 rounded-lg flex items-center justify-center text-2xl font-extrabold shadow-md transform-gpu ${
+          isDanger
+            ? "bg-linear-to-br from-rose-700 to-rose-500 text-white animate-pulse"
+            : "bg-black/80 text-white"
+        }`}
+      >
+        {val}
+      </div>
+      <div className="text-[10px] text-white/50 mt-1">{label}</div>
+    </div>
+  );
+
+  return (
+    <div className="flex items-center">
+      <Block val={h} label="Hrs" />
+      <div className="text-white/40 mx-1 font-bold">:</div>
+      <Block val={m} label="Min" />
+      <div className="text-white/40 mx-1 font-bold">:</div>
+      <Block val={s} label="Sec" />
+    </div>
+  );
+}
+
+function LiveCountdown({ endAt }) {
+  const time = useCountdown(endAt);
+  return <FlipTimer time={time} />;
+}
+
+/* ---------------------- ReList Modal Component ---------------------- */
+
 function ReListModal({ open, onClose, product, token, onCreated }) {
   const [form, setForm] = useState({
     productId: product?._id || product?.id || "",
@@ -84,7 +178,7 @@ function ReListModal({ open, onClose, product, token, onCreated }) {
       setForm((f) => ({
         ...f,
         productId: product._id || product.id,
-        startPrice: product.startPrice || f.startPrice || "",
+        startPrice: product.startPrice ?? f.startPrice ?? "",
       }));
       setError("");
     }
@@ -107,7 +201,7 @@ function ReListModal({ open, onClose, product, token, onCreated }) {
     setSaving(true);
     try {
       await api.post(
-        "/auctions",
+        "/auctions/relist",
         {
           productId: form.productId,
           type: form.type,
@@ -122,7 +216,7 @@ function ReListModal({ open, onClose, product, token, onCreated }) {
       onClose();
     } catch (err) {
       setError(
-        err?.response?.data?.message || err.message || "Failed to create"
+        err?.response?.data?.message || err.message || "Failed to re-list"
       );
     } finally {
       setSaving(false);
@@ -144,7 +238,7 @@ function ReListModal({ open, onClose, product, token, onCreated }) {
             className="p-2 rounded hover:bg-white/10"
             aria-label="close"
           >
-            <HiX className="w-5 h-5" />
+            <Icons.HiX className="w-5 h-5" />
           </button>
         </div>
 
@@ -232,7 +326,7 @@ function ReListModal({ open, onClose, product, token, onCreated }) {
               <SmallSpinner />
             ) : (
               <>
-                <HiPlus /> Create Auction
+                <Icons.HiPlus /> Create Auction
               </>
             )}
           </button>
@@ -242,12 +336,12 @@ function ReListModal({ open, onClose, product, token, onCreated }) {
   );
 }
 
-/* ---------- Main Page ---------- */
+/* ---------------------- Main Page Component ---------------------- */
 
 export default function SellerAuctions() {
   const { user, token } = useContext(AuthContext);
   const [auctions, setAuctions] = useState([]);
-  const [products, setProducts] = useState([]); // seller's products
+  const [products, setProducts] = useState([]); // seller products
   const [loading, setLoading] = useState(true);
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [error, setError] = useState("");
@@ -255,7 +349,7 @@ export default function SellerAuctions() {
   const [relistProduct, setRelistProduct] = useState(null);
   const [refreshToggle, setRefreshToggle] = useState(0);
 
-  // loader — fetch auctions + seller's products
+  // Load auctions + products for seller
   useEffect(() => {
     let mounted = true;
 
@@ -263,17 +357,16 @@ export default function SellerAuctions() {
       setLoading(true);
       setError("");
       try {
-        // fetch auctions public endpoint (supports query)
+        // request seller-specific auctions (backend supports my=true)
         const [aRes, pRes] = await Promise.all([
           api.get("/auctions?my=true", {
             headers: { Authorization: `Bearer ${token}` },
-          }), // should work without auth for listing
+          }),
           api.get("/products", {
             headers: { Authorization: `Bearer ${token}` },
           }),
         ]);
 
-        // handle shapes: array OR { auctions, total, ... }
         const rawAuctions = Array.isArray(aRes.data)
           ? aRes.data
           : aRes.data?.auctions || [];
@@ -282,51 +375,40 @@ export default function SellerAuctions() {
           ? pRes.data
           : pRes.data?.products || [];
 
-        // normalize: ensure every auction has product populated with object if possible
-        // Some backends return auction.product as id (string). We'll map product objects by id.
+        // map products by id for quick attach
         const productMap = new Map();
         for (const p of rawProducts) {
           const id = p._id || p.id;
           if (id) productMap.set(String(id), p);
         }
 
-        // Build seller-specific lists (only auctions created by this seller)
         const sellerId = normalizeSellerId(user) || null;
 
         const myAuctions = rawAuctions
           .map((a) => {
-            // make defensive copy
             const obj = { ...(a || {}) };
 
-            // normalize product field: some backends use product or productId
             const prodRef =
               obj.product || obj.productId || obj.product_id || null;
-
-            // If product is id string and we have productMap, attach product object
             if (typeof prodRef === "string" && productMap.has(prodRef)) {
               obj.product = productMap.get(prodRef);
             } else if (prodRef && typeof prodRef === "object") {
-              // ensure product has id/_id
               const id = prodRef._id || prodRef.id;
-              if (!obj.product && id && productMap.has(String(id))) {
+              if (id && productMap.has(String(id))) {
                 obj.product = productMap.get(String(id));
               } else {
                 obj.product = prodRef;
               }
             }
 
-            // normalize seller property
             obj.seller = obj.seller || obj.sellerId || obj.seller_id || null;
-
             return obj;
           })
           .filter((a) => {
-            // filter auctions by seller id (supports different shapes)
             const s = normalizeSellerId(a.seller);
             return s && sellerId && s === sellerId;
           });
 
-        // Keep seller's products only (for inventory / re-list)
         const myProducts = rawProducts.filter((p) => {
           const s = normalizeSellerId(p.seller);
           return s && sellerId && s === sellerId;
@@ -346,40 +428,24 @@ export default function SellerAuctions() {
     };
 
     load();
-    return () => {
-      mounted = false;
-    };
+    return () => (mounted = false);
   }, [token, user, refreshToggle]);
 
   const refresh = () => setRefreshToggle((s) => s + 1);
 
-  // counts computed robustly: prefer explicit status, fallback to time windows
+  // counts - prefer explicit status but fallback to time windows
   const counts = useMemo(() => {
     const now = new Date();
-
-    const live = auctions.filter(
-      (a) =>
-        new Date(a.startAt) <= now &&
-        new Date(a.endAt) >= now &&
-        a.status !== "closed"
-    ).length;
-
-    const upcoming = auctions.filter(
-      (a) => new Date(a.startAt) > now && a.status !== "closed"
-    ).length;
-
-    const ended = auctions.filter(
-      (a) => a.status === "closed" || new Date(a.endAt) < now
-    ).length;
-
+    const live = auctions.filter((a) => isAuctionLive(a, now)).length;
+    const upcoming = auctions.filter((a) => isAuctionUpcoming(a, now)).length;
+    const ended = auctions.filter((a) => isAuctionEnded(a, now)).length;
     const unsold = products.filter(
-      (p) => p.inventoryCount > 0 && p.status !== "sold"
+      (p) => (p.inventoryCount ?? 0) > 0 && p.status !== "sold"
     ).length;
-
     return { live, upcoming, ended, unsold };
   }, [auctions, products]);
 
-  // Close auction immediately endpoint (seller only)
+  // Close auction now (seller-only)
   const closeNow = async (auctionId) => {
     if (!confirm("Close this auction now? This will finalize the auction."))
       return;
@@ -414,17 +480,18 @@ export default function SellerAuctions() {
     }
   };
 
-  // Small helper to show primary image (safe)
   const primaryImage = (product) => {
     if (!product) return null;
-    if (Array.isArray(product.images) && product.images.length > 0)
+    if (Array.isArray(product.images) && product.images.length)
       return product.images[0];
     if (product.image) return product.image;
     return null;
   };
 
+  /* ---------------------- Render ---------------------- */
+
   return (
-    <div className="min-h-screen pt-28 pb-20 bg-linear-to-br from-[#071029] to-[#0b1220] text-white">
+    <div className="min-h-screen pt-28 pb-24 bg-linear-to-br from-[#071029] to-[#0b1220] text-white">
       <div className="max-w-6xl mx-auto px-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-8 gap-4">
@@ -441,14 +508,14 @@ export default function SellerAuctions() {
               onClick={refresh}
               className="flex items-center gap-2 px-4 py-2 rounded bg-white/5 hover:bg-white/10 transition"
             >
-              <HiRefresh className="w-5 h-5" /> Refresh
+              <Icons.HiRefresh className="w-5 h-5" /> Refresh
             </button>
 
             <button
               onClick={() => (window.location.href = "/seller/create-auction")}
               className="flex items-center gap-2 px-4 py-2 rounded bg-yellow-400 text-black font-semibold"
             >
-              <HiPlus className="w-5 h-5" /> + Create Auction
+              <Icons.HiPlus className="w-5 h-5" /> + Create Auction
             </button>
           </div>
         </div>
@@ -544,16 +611,28 @@ export default function SellerAuctions() {
                         </div>
                       </td>
 
+                      {/* Timing cell replaced with live countdown */}
                       <td className="p-4">
-                        <div className="text-sm">
+                        <div className="text-xs text-white/50">
+                          Starts:{" "}
                           {a.startAt
                             ? new Date(a.startAt).toLocaleString()
                             : "-"}
                         </div>
-                        <div className="text-xs text-white/60">
-                          ends{" "}
-                          {a.endAt ? new Date(a.endAt).toLocaleString() : "-"}
-                        </div>
+
+                        {isAuctionLive(a) ? (
+                          <div className="mt-2">
+                            <div className="text-xs text-white/60 mb-1">
+                              Ends In:
+                            </div>
+                            <LiveCountdown endAt={a.endAt} />
+                          </div>
+                        ) : (
+                          <div className="text-xs text-white/40 mt-2">
+                            Ends:{" "}
+                            {a.endAt ? new Date(a.endAt).toLocaleString() : "-"}
+                          </div>
+                        )}
                       </td>
 
                       <td className="p-4">{renderStatus(a)}</td>
@@ -584,8 +663,13 @@ export default function SellerAuctions() {
                           </button>
 
                           <button
+                            disabled={a.product?.status !== "unsold"}
                             onClick={() => openRelist(a.product)}
-                            className="px-3 py-1 rounded bg-yellow-300 text-black"
+                            className={`px-3 py-1 rounded text-black ${
+                              a.product?.status === "unsold"
+                                ? "bg-yellow-300"
+                                : "bg-gray-500 cursor-not-allowed"
+                            }`}
                           >
                             Re-list
                           </button>
@@ -597,10 +681,9 @@ export default function SellerAuctions() {
               </table>
             </div>
 
-            {/* Mobile / small screens cards */}
+            {/* Mobile cards */}
             <div className="grid lg:hidden grid-cols-1 gap-4">
               {auctions.map((a) => {
-                const now = new Date();
                 const startLabel = a.startAt
                   ? formatDistanceToNowStrict(new Date(a.startAt), {
                       addSuffix: true,
@@ -639,14 +722,28 @@ export default function SellerAuctions() {
                           {a.product?.category || "-"}
                         </div>
 
-                        <div className="mt-2 text-sm">
-                          <div>
-                            Start:{" "}
-                            <span className="font-medium">{startLabel}</span>
-                          </div>
-                          <div>
-                            End: <span className="font-medium">{endLabel}</span>
-                          </div>
+                        <div className="mt-2">
+                          {isAuctionLive(a) ? (
+                            <>
+                              <div className="text-xs text-white/60 mb-1">
+                                Ends In:
+                              </div>
+                              <LiveCountdown endAt={a.endAt} />
+                            </>
+                          ) : (
+                            <>
+                              <div className="text-xs text-white/50">
+                                Starts:{" "}
+                                <span className="font-medium">
+                                  {startLabel}
+                                </span>
+                              </div>
+                              <div className="text-xs text-white/50">
+                                Ends:{" "}
+                                <span className="font-medium">{endLabel}</span>
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>

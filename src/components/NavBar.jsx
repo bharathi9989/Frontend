@@ -33,7 +33,7 @@ export default function NavBar() {
           {/* BUYER MENU */}
           {user?.role === "buyer" && (
             <>
-              <NavItem to="/buyer/auctions" label="Marketplace" />
+              <NavItem to="/auctions" label="Marketplace" />
               <NavItem to="/buyer/profile" label="Profile" />
               <NavItem to="/bids/history" label="Bid History" />
             </>
@@ -43,10 +43,11 @@ export default function NavBar() {
           {user?.role === "seller" && (
             <>
               <NavItem to="/seller/dashboard" label="Dashboard" />
+              <NavItem to="/seller/products" label="My Products" />
               <NavItem to="/seller/create-auction" label="Create Auction" />
 
-              {/* FIXED: Marketplace must go to BUYER auctions */}
-              <NavItem to="/buyer/auctions" label="Marketplace" />
+              {/* Marketplace is SAME for seller → buyer view */}
+              <NavItem to="/auctions" label="Marketplace" />
 
               <NavItem to="/seller/auctions" label="My Auctions" />
             </>
@@ -86,7 +87,7 @@ export default function NavBar() {
             {user?.role === "buyer" && (
               <>
                 <NavItem
-                  to="/buyer/auctions"
+                  to="/auctions"
                   label="Marketplace"
                   onClick={toggleMenu}
                 />
@@ -117,9 +118,9 @@ export default function NavBar() {
                   onClick={toggleMenu}
                 />
 
-                {/* FIXED: Marketplace → buyer auctions */}
+                {/* Marketplace always points to /auctions */}
                 <NavItem
-                  to="/buyer/auctions"
+                  to="/auctions"
                   label="Marketplace"
                   onClick={toggleMenu}
                 />

@@ -8,13 +8,13 @@ import React, {
 } from "react";
 import api from "../api/axios";
 import { AuthContext } from "../context/AuthContext";
-import { initSocket, getSocket } from "../utils/socket"; // you have this
+import { initSocket, getSocket } from "../utils/socket";
 import { Link, useNavigate } from "react-router-dom";
-
 
 export default function SellerDashboard() {
   const { user, token } = useContext(AuthContext);
   const nav = useNavigate();
+  const socketRef = useRef(null);
 
   const [loading, setLoading] = useState(false);
   const [auctions, setAuctions] = useState([]);
@@ -25,153 +25,146 @@ export default function SellerDashboard() {
     inventory: 0,
   });
   const [error, setError] = useState(null);
-  const socketRef = useRef(null);
 
-  // fetch seller auctions (paginated small list)
+  /* ---------------------- Fetch Seller Auctions ---------------------- */
   const fetchMyAuctions = useCallback(async () => {
     setLoading(true);
     setError(null);
+
     try {
-      // request multiple statuses - simple approach: load all seller auctions (limit 100)
       const res = await api.get("/auctions", {
         params: { my: true, limit: 100, page: 1 },
+        headers: { Authorization: `Bearer ${token}` },
       });
+
       const list = res.data?.auctions || [];
       setAuctions(list);
 
-      // compute counts
+      /* ----- Compute Counts ----- */
       let live = 0,
         upcoming = 0,
-        ended = 0,
-        inventory = 0;
+        ended = 0;
+
       const now = new Date();
       for (const a of list) {
-        // derive status robustly: prefer persisted a.status else compute from times
-        const status =
-          a.status ||
-          (() => {
-            const s = new Date(a.startAt);
-            const e = new Date(a.endAt);
-            if (now < s) return "upcoming";
-            if (now > e) return "ended";
-            return "live";
-          })();
+        const start = new Date(a.startAt);
+        const end = new Date(a.endAt);
+
+        let status = a.status;
+        if (!status) {
+          if (now < start) status = "upcoming";
+          else if (now > end) status = "closed";
+          else status = "live";
+        }
 
         if (status === "live") live++;
         else if (status === "upcoming") upcoming++;
-        else if (status === "closed" || status === "ended") ended++;
+        else if (status === "closed") ended++;
       }
 
-      // inventory: count products belonging to seller that are unsold (quick fetch)
-      try {
-        const pRes = await api.get("/products", { params: {} });
-        // get only products of this seller
-        const products = Array.isArray(pRes.data)
-          ? pRes.data
-          : pRes.data?.products || [];
-        inventory = products.filter(
-          (p) =>
-            String(p.seller?._id || p.seller) === String(user._id) &&
-            (p.status === "unsold" || p.status === "active")
-        ).length;
-      } catch (pErr) {
-        // fallback: derive inventory from auctions where product.status === 'unsold'
-        inventory = list.reduce(
-          (acc, a) =>
-            acc + (a.product && a.product.status === "unsold" ? 1 : 0),
-          0
-        );
-      }
+      /* ----- Inventory Count: count unsold products of this seller ----- */
+      const pRes = await api.get("/products", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const products = Array.isArray(pRes.data)
+        ? pRes.data
+        : pRes.data?.products || [];
+
+      const inventory = products.filter(
+        (p) =>
+          String(p.seller?._id || p.seller) === String(user._id) &&
+          p.status !== "sold"
+      ).length;
 
       setCounts({ live, upcoming, ended, inventory });
     } catch (err) {
-      console.error(
-        "SellerDashboard fetch error:",
-        err?.response?.data || err.message || err
-      );
+      console.error("SellerDashboard fetch error:", err);
       setError(
         err?.response?.data?.message || "Failed to load seller auctions"
       );
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [token, user]);
 
-  // socket init for live updates
+  /* ---------------------- Socket Initialization ---------------------- */
   useEffect(() => {
     initSocket();
     let socket;
+
     try {
       socket = getSocket();
       socketRef.current = socket;
-    } catch (e) {
-      socketRef.current = null;
+    } catch {
       socket = null;
     }
 
-    // If socket available, subscribe to seller-related events:
-    // - auctionClosed: if seller closed auction elsewhere, refresh counts
-    // - newBid: we can optionally update bid count or last bid
-    const onAuctionClosed = (payload) => {
-      if (!payload || !payload.auctionId) return;
-      // quick update: mark that auction as closed in UI
-      setAuctions((prev) =>
-        prev.map((a) =>
-          String(a._id) === String(payload.auctionId)
-            ? { ...a, status: "closed" }
-            : a
-        )
-      );
-      // refresh counts
-      fetchMyAuctions();
-    };
-
-    const onNewBid = (payload) => {
-      if (!payload || !payload.auctionId) return;
-      // optional: store lastBid on auction row
-      setAuctions((prev) =>
-        prev.map((a) =>
-          String(a._id) === String(payload.auctionId)
-            ? {
-                ...a,
-                lastBid: payload.bid?.amount || (payload.amount ?? a.lastBid),
-              }
-            : a
-        )
-      );
-    };
-
     if (socket) {
-      socket.on("auctionClosed", onAuctionClosed);
-      socket.on("newBid", onNewBid);
+      // When an auction closes → update UI
+      socket.on("auctionClosed", (payload) => {
+        if (!payload || !payload.auctionId) return;
+
+        setAuctions((prev) =>
+          prev.map((a) =>
+            String(a._id) === String(payload.auctionId)
+              ? { ...a, status: "closed" }
+              : a
+          )
+        );
+
+        fetchMyAuctions();
+      });
+
+      // When new bid arrives → update lastBid (optional UI)
+      socket.on("newBid", (payload) => {
+        if (!payload || !payload.auctionId) return;
+
+        setAuctions((prev) =>
+          prev.map((a) =>
+            String(a._id) === String(payload.auctionId)
+              ? {
+                  ...a,
+                  lastBid: payload.bid?.amount || payload.amount || a.lastBid,
+                }
+              : a
+          )
+        );
+      });
     }
+
     return () => {
       if (socket) {
-        socket.off("auctionClosed", onAuctionClosed);
-        socket.off("newBid", onNewBid);
+        socket.off("auctionClosed");
+        socket.off("newBid");
       }
     };
   }, [fetchMyAuctions]);
 
+  /* ---------------------- Initial Load ---------------------- */
   useEffect(() => {
     fetchMyAuctions();
   }, [fetchMyAuctions]);
 
-  // Close auction now (seller)
+  /* ---------------------- Close Auction ---------------------- */
   const closeNow = async (auctionId) => {
-    if (
-      !window.confirm("Close this auction now? This operation is irreversible.")
-    )
+    if (!window.confirm("Close auction now? This action is irreversible.")) {
       return;
+    }
+
     try {
-      // Put disabled state at row-level via auctions state
       setAuctions((prev) =>
         prev.map((a) =>
           String(a._id) === auctionId ? { ...a, closing: true } : a
         )
       );
-      const res = await api.put(`/auctions/${auctionId}/close`);
-      // backend returns success; update local state optimistically
+
+      const res = await api.put(
+        `/auctions/${auctionId}/close`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
       setAuctions((prev) =>
         prev.map((a) =>
           String(a._id) === auctionId
@@ -179,22 +172,20 @@ export default function SellerDashboard() {
             : a
         )
       );
-      // refresh counts (safe)
+
       fetchMyAuctions();
       alert(res.data?.message || "Auction closed");
     } catch (err) {
-      console.error("closeNow error:", err?.response || err);
-      const code = err?.response?.status;
-      if (code === 401) {
-        alert("Authentication error — login again.");
-      } else if (code === 403) {
-        alert("Not authorized to close this auction.");
-      } else if (code === 409) {
-        alert("Auction already closed by someone else — refresh to update.");
-      } else {
-        alert(err?.response?.data?.message || "Failed to close auction");
-      }
-      // clear closing flag
+      console.error("closeNow error:", err);
+
+      const message =
+        err?.response?.data?.message ||
+        (err?.response?.status === 409
+          ? "Auction already closed."
+          : "Failed to close auction.");
+
+      alert(message);
+
       setAuctions((prev) =>
         prev.map((a) =>
           String(a._id) === auctionId ? { ...a, closing: false } : a
@@ -203,7 +194,7 @@ export default function SellerDashboard() {
     }
   };
 
-  // small helper for human time
+  /* ---------------------- Helpers ---------------------- */
   const fmt = (iso) => {
     try {
       return new Date(iso).toLocaleString();
@@ -212,9 +203,11 @@ export default function SellerDashboard() {
     }
   };
 
+  /* ---------------------- Render ---------------------- */
   return (
     <div className="min-h-screen pt-28 p-6 bg-gradient-to-b from-black via-gray-900 to-[#070707] text-yellow-100">
       <div className="max-w-6xl mx-auto">
+        {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold">Seller Dashboard</h1>
           <div className="flex gap-3">
@@ -224,28 +217,26 @@ export default function SellerDashboard() {
             >
               Refresh
             </button>
+
             <button
               onClick={() => nav("/seller/create-auction")}
               className="px-4 py-2 bg-yellow-500 text-black rounded"
             >
               + Create Auction
             </button>
+
             <Link
               to="/seller/auctions"
               className="px-4 py-2 bg-indigo-700 rounded"
             >
-              Seller Auctions
+              Manage Auctions
             </Link>
           </div>
         </div>
 
         {/* Stats */}
         <div className="grid grid-cols-4 gap-4 mb-6">
-          <StatCard
-            title="Live"
-            value={counts.live}
-            subtitle="Currently running"
-          />
+          <StatCard title="Live" value={counts.live} subtitle="Running now" />
           <StatCard
             title="Upcoming"
             value={counts.upcoming}
@@ -259,11 +250,10 @@ export default function SellerDashboard() {
           />
         </div>
 
-        {/* Last auctions table */}
+        {/* Auctions Table */}
         <div className="bg-[#070707]/70 border border-yellow-900 p-4 rounded">
-          <div className="text-lg font-semibold mb-4">
-            Your Auctions (latest)
-          </div>
+          <div className="text-lg font-semibold mb-4">Your Latest Auctions</div>
+
           {loading ? (
             <div className="text-yellow-200">Loading...</div>
           ) : error ? (
@@ -283,6 +273,7 @@ export default function SellerDashboard() {
                     <th>Actions</th>
                   </tr>
                 </thead>
+
                 <tbody className="text-sm">
                   {auctions.slice(0, 50).map((a) => (
                     <tr key={a._id} className="border-t border-yellow-900/10">
@@ -294,17 +285,21 @@ export default function SellerDashboard() {
                           {a.product?.category}
                         </div>
                       </td>
+
                       <td>{a.type}</td>
+
                       <td>
-                        ₹{a.startPrice}{" "}
+                        ₹{a.startPrice}
                         <div className="text-xs text-yellow-100/60">
                           inc {a.minIncrement}
                         </div>
                       </td>
+
                       <td className="text-xs">
                         <div>Starts: {fmt(a.startAt)}</div>
                         <div>Ends: {fmt(a.endAt)}</div>
                       </td>
+
                       <td>
                         <span
                           className={`px-2 py-1 rounded-full text-xs ${
@@ -318,6 +313,7 @@ export default function SellerDashboard() {
                           {a.status}
                         </span>
                       </td>
+
                       <td className="space-x-2">
                         <Link
                           to={`/auction/${a._id}`}
@@ -325,20 +321,19 @@ export default function SellerDashboard() {
                         >
                           View
                         </Link>
-                        {
-                          /* Close Now only if not closed and seller */
-                          a.status !== "closed" && (
-                            <button
-                              disabled={a.closing}
-                              onClick={() => closeNow(a._id)}
-                              className="px-3 py-1 bg-red-500 rounded text-sm"
-                            >
-                              {a.closing ? "Closing..." : "Close Now"}
-                            </button>
-                          )
-                        }
+
+                        {a.status !== "closed" && (
+                          <button
+                            disabled={a.closing}
+                            onClick={() => closeNow(a._id)}
+                            className="px-3 py-1 bg-red-500 rounded text-sm"
+                          >
+                            {a.closing ? "Closing..." : "Close"}
+                          </button>
+                        )}
+
                         <Link
-                          to={`/seller/auctions?filter=${a._id}`}
+                          to={`/seller/auctions`}
                           className="px-3 py-1 bg-yellow-400 text-black rounded text-sm"
                         >
                           Re-list
@@ -356,7 +351,7 @@ export default function SellerDashboard() {
   );
 }
 
-/* Small UI stat card */
+/* ---------------------- StatCard ---------------------- */
 function StatCard({ title, value, subtitle }) {
   return (
     <div className="p-4 bg-[#0b0b0b]/50 border border-yellow-900 rounded">

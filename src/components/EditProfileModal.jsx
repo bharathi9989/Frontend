@@ -1,12 +1,15 @@
+// src/components/EditProfileModal.jsx
 import React, { useState } from "react";
 import api from "../api/axios";
 
 export default function EditProfileModal({ open, onClose, user, onUpdated }) {
   if (!open) return null;
 
+  const safeUser = user || {};
+
   const [form, setForm] = useState({
-    name: user.name,
-    email: user.email,
+    name: safeUser.name || "",
+    email: safeUser.email || "",
     password: "",
   });
 
@@ -23,14 +26,27 @@ export default function EditProfileModal({ open, onClose, user, onUpdated }) {
     setMsg("");
 
     try {
-      const res = await api.put("/profile/update", form);
+      const payload = {
+        name: form.name,
+        email: form.email,
+      };
+
+      // Only send password if user typed something
+      if (form.password.trim() !== "") {
+        payload.password = form.password.trim();
+      }
+
+      const res = await api.put("/profile/update", payload);
+
+      const updated = res?.data?.user || payload;
+      onUpdated(updated);
+
       setMsg("Profile updated successfully!");
-      onUpdated(res.data.user); // update parent data
 
       setTimeout(() => {
         setMsg("");
         onClose();
-      }, 1200);
+      }, 900);
     } catch (err) {
       setMsg(err.response?.data?.message || "Update failed");
     } finally {
@@ -83,7 +99,7 @@ export default function EditProfileModal({ open, onClose, user, onUpdated }) {
               name="password"
               value={form.password}
               onChange={handleChange}
-              placeholder="Leave empty if not changing"
+              placeholder="Leave empty to keep current password"
               className="w-full p-3 rounded-xl bg-white/10 border border-white/20 text-white"
             />
           </div>

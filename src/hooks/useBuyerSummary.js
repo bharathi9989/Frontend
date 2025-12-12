@@ -1,28 +1,3 @@
-// import { useEffect, useState } from "react";
-// import api from "../api/axios";
-
-// export default function useBuyerSummary() {
-//   const [data, setData] = useState(null);
-//   const [loading, setLoading] = useState(true);
-
-//   useEffect(() => {
-//     async function load() {
-//       try {
-//         const res = await api.get("/profile/summary");
-//         setData(res.data);
-//       } catch (err) {
-//         console.log("Summary error:", err);
-//       } finally {
-//         setLoading(false);
-//       }
-//     }
-//     load();
-//   }, []);
-
-//   return { data, loading };
-// }
-
-
 // src/hooks/useBuyerSummary.js
 import { useEffect, useState, useContext } from "react";
 import api from "../api/axios";
@@ -30,31 +5,37 @@ import { AuthContext } from "../context/AuthContext";
 
 export default function useBuyerSummary() {
   const { token, user } = useContext(AuthContext);
-  const [summary, setSummary] = useState({
+
+  const [data, setData] = useState({
     totalBids: 0,
-    wonAuctions: 0,
-    activeBids: 0,
+    won: 0,
+    lost: 0,
+    active: 0,
+    upcoming: 0,
+    recent: [],
   });
+
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user || !token) return;
 
     async function load() {
+      setLoading(true);
       try {
-        const res = await api.get("/bids/summary", {
+        const res = await api.get("/profile/summary", {
           headers: { Authorization: `Bearer ${token}` },
         });
-        setSummary(res.data);
+        setData(res.data);
       } catch (err) {
-        console.error("Summary load failed:", err);
+        console.error("Buyer summary load failed:", err);
       } finally {
         setLoading(false);
       }
     }
 
     load();
-  }, [user, token]);
+  }, [token, user]);
 
-  return { summary, loading };
+  return { data, loading };
 }

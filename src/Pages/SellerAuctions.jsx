@@ -1,212 +1,118 @@
-// src/Pages/SellerAuctions.jsx
+// src/pages/SellerAuctions.jsx
 import React, { useContext, useEffect, useMemo, useState } from "react";
 import { AuthContext } from "../context/AuthContext";
 import api from "../api/axios";
 import * as Icons from "react-icons/hi";
 import { formatDistanceToNowStrict } from "date-fns";
 
-/**
- * SellerAuctions.jsx
- * Single-file replacement — robust, production-ready UI for seller auctions.
- *
- * Expects:
- * - api.get("/auctions?my=true")  => seller auctions (or paged object { auctions, total })
- * - api.get("/products")          => seller products
- * - api.put("/auctions/:id/close", {}) => close auction immediately
- * - api.post("/auctions/relist")  => re-list product
- *
- * Notes:
- * - Uses existing `api` axios instance for baseURL/auth.
- * - Uses react-icons/hi via Icons.* (no named import mismatch).
- */
+/* ============================================================
+   UTILS
+============================================================ */
+const normalizeId = (v) =>
+  typeof v === "string" ? v : v?._id || v?.id || v?.$id || null;
 
-/* ---------------------- Utilities ---------------------- */
-
-const normalizeSellerId = (value) => {
-  if (!value) return null;
-  if (typeof value === "string") return value;
-  if (typeof value === "object") return value._id || value.id || null;
-  return null;
-};
-
-const isAuctionLive = (a, now = new Date()) => {
+const isLive = (a) => {
   if (!a) return false;
-  if (a.status === "live") return true;
-  if (a.status === "closed" || a.status === "ended") return false;
-  const start = a.startAt ? new Date(a.startAt) : null;
-  const end = a.endAt ? new Date(a.endAt) : null;
-  if (!start || !end) return false;
-  return start <= now && end >= now;
+  const now = new Date();
+  const s = new Date(a.startAt);
+  const e = new Date(a.endAt);
+  return now >= s && now < e && a.status !== "closed";
 };
+const isUpcoming = (a) => new Date(a.startAt) > new Date();
+const isEnded = (a) => new Date(a.endAt) < new Date() || a.status === "closed";
 
-const isAuctionUpcoming = (a, now = new Date()) => {
-  if (!a) return false;
-  if (a.status === "upcoming") return true;
-  const start = a.startAt ? new Date(a.startAt) : null;
-  if (!start) return false;
-  return start > now;
-};
-
-const isAuctionEnded = (a, now = new Date()) => {
-  if (!a) return false;
-  if (a.status === "closed" || a.status === "ended") return true;
-  const end = a.endAt ? new Date(a.endAt) : null;
-  if (!end) return false;
-  return end < now;
-};
-
-/* ---------------------- UI Small Pieces ---------------------- */
-
-function Badge({ children, color = "bg-gray-300 text-black" }) {
-  return (
-    <span
-      className={`inline-block px-3 py-1 text-xs rounded-full ${color} font-semibold`}
-    >
-      {children}
-    </span>
-  );
-}
-
-function SmallSpinner({ size = 4 }) {
-  return (
-    <div
-      style={{ width: size * 4, height: size * 4 }}
-      className="border-2 border-white/30 border-t-white rounded-full animate-spin"
-    />
-  );
-}
-
-/* ---------------------- Countdown Hook & Flip UI ---------------------- */
-
-/**
- * useCountdown(endAt)
- * returns "HH:MM:SS" string (updates every second), or empty string if no endAt.
- */
+/* ============================================================
+   COUNTDOWN HOOK
+============================================================ */
 function useCountdown(endAt) {
-  const [timeLeft, setTimeLeft] = useState("");
+  const [time, setTime] = useState("");
 
   useEffect(() => {
-    if (!endAt) {
-      setTimeLeft("");
-      return;
-    }
-    let mounted = true;
-
-    const update = () => {
-      if (!mounted) return;
+    if (!endAt) return;
+    const tick = () => {
       const now = new Date();
       const end = new Date(endAt);
-      const diff = end.getTime() - now.getTime();
+      const diff = end - now;
+      if (diff <= 0) return setTime("00:00:00");
 
-      if (diff <= 0) {
-        setTimeLeft("00:00:00");
-        return;
-      }
-
-      const totalSec = Math.floor(diff / 1000);
-      const hours = String(Math.floor(totalSec / 3600)).padStart(2, "0");
-      const mins = String(Math.floor((totalSec % 3600) / 60)).padStart(2, "0");
-      const secs = String(totalSec % 60).padStart(2, "0");
-
-      setTimeLeft(`${hours}:${mins}:${secs}`);
+      const sec = Math.floor(diff / 1000);
+      const h = String(Math.floor(sec / 3600)).padStart(2, "0");
+      const m = String(Math.floor((sec % 3600) / 60)).padStart(2, "0");
+      const s = String(sec % 60).padStart(2, "0");
+      setTime(`${h}:${m}:${s}`);
     };
-
-    update();
-    const id = setInterval(update, 1000);
-    return () => {
-      mounted = false;
-      clearInterval(id);
-    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
   }, [endAt]);
 
-  return timeLeft;
-}
-
-/**
- * FlipTimer - simple flip-like blocks for H:M:S
- * danger -> last 10 minutes
- */
-function FlipTimer({ time }) {
-  if (!time) return null;
-  const [h, m, s] = time.split(":");
-  const isDanger = Number(h) === 0 && Number(m) < 10;
-
-  const Block = ({ val, label }) => (
-    <div className="flex flex-col items-center mx-1">
-      <div
-        className={`relative w-14 h-16 rounded-lg flex items-center justify-center text-2xl font-extrabold shadow-md transform-gpu ${
-          isDanger
-            ? "bg-linear-to-br from-rose-700 to-rose-500 text-white animate-pulse"
-            : "bg-black/80 text-white"
-        }`}
-      >
-        {val}
-      </div>
-      <div className="text-[10px] text-white/50 mt-1">{label}</div>
-    </div>
-  );
-
-  return (
-    <div className="flex items-center">
-      <Block val={h} label="Hrs" />
-      <div className="text-white/40 mx-1 font-bold">:</div>
-      <Block val={m} label="Min" />
-      <div className="text-white/40 mx-1 font-bold">:</div>
-      <Block val={s} label="Sec" />
-    </div>
-  );
+  return time;
 }
 
 function LiveCountdown({ endAt }) {
-  const time = useCountdown(endAt);
-  return <FlipTimer time={time} />;
+  const t = useCountdown(endAt);
+  if (!t) return null;
+  const [h, m, s] = t.split(":");
+  return (
+    <div className="flex gap-1 items-center text-white font-mono text-lg">
+      {h}:{m}:{s}
+    </div>
+  );
 }
 
-/* ---------------------- ReList Modal ---------------------- */
+/* ============================================================
+   BADGE
+============================================================ */
+const Badge = ({ text, color }) => (
+  <span className={`px-2 py-1 rounded-full text-xs font-semibold ${color}`}>
+    {text}
+  </span>
+);
 
-function ReListModal({ open, onClose, product, token, onCreated }) {
+/* ============================================================
+   RELIST MODAL
+============================================================ */
+function ReListModal({ open, onClose, product, token, onDone }) {
   const [form, setForm] = useState({
-    productId: product?._id || product?.id || "",
     type: "traditional",
-    startPrice: product?.startPrice || "",
+    startPrice: "",
     minIncrement: 100,
     startAt: "",
     endAt: "",
   });
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [err, setErr] = useState("");
 
   useEffect(() => {
     if (product) {
       setForm((f) => ({
         ...f,
-        productId: product._id || product.id,
-        startPrice: product.startPrice ?? f.startPrice ?? "",
+        startPrice: f.startPrice || product.startPrice || "",
       }));
-      setError("");
     }
   }, [product]);
 
   if (!open) return null;
+  if (!product) return null;
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm((s) => ({ ...s, [name]: value }));
-  };
+  const change = (e) =>
+    setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
 
   const submit = async (e) => {
     e.preventDefault();
-    setError("");
-    if (!form.productId || !form.startAt || !form.endAt) {
-      setError("Please fill required fields.");
+    setErr("");
+
+    if (!form.startAt || !form.endAt) {
+      setErr("Start and End time required");
       return;
     }
+
     setSaving(true);
     try {
       await api.post(
         "/auctions/relist",
         {
-          productId: form.productId,
+          productId: product._id,
           type: form.type,
           startPrice: Number(form.startPrice),
           minIncrement: Number(form.minIncrement),
@@ -215,154 +121,109 @@ function ReListModal({ open, onClose, product, token, onCreated }) {
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      onCreated && onCreated();
+      onDone();
       onClose();
-    } catch (err) {
-      setError(
-        err?.response?.data?.message || err.message || "Failed to re-list"
-      );
+    } catch (e) {
+      setErr(e?.response?.data?.message || "Failed");
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
       <form
         onSubmit={submit}
-        className="relative z-10 w-full max-w-2xl bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl p-6 text-white"
+        className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-6 text-white w-full max-w-lg"
       >
         <div className="flex justify-between items-start mb-3">
-          <h3 className="text-2xl font-bold">♻️ Re-list Product</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded hover:bg-white/10"
-            aria-label="close"
-          >
-            <Icons.HiX className="w-5 h-5" />
+          <h2 className="text-2xl font-bold">Re-list Product</h2>
+          <button onClick={onClose}>
+            <Icons.HiX className="text-white" />
           </button>
         </div>
 
-        <div className="mb-4 text-sm text-white/70">{product?.title}</div>
+        {err && <p className="text-rose-300 mb-3">{err}</p>}
 
-        {error && <div className="mb-3 text-sm text-rose-300">{error}</div>}
+        <label className="block mb-2 text-sm">Auction Type</label>
+        <select
+          name="type"
+          value={form.type}
+          onChange={change}
+          className="w-full p-2 rounded bg-white/10 mb-4"
+        >
+          <option value="traditional">Traditional</option>
+          <option value="reverse">Reverse</option>
+          <option value="sealed">Sealed</option>
+        </select>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-sm mb-1">Auction Type</label>
-            <select
-              name="type"
-              value={form.type}
-              onChange={handleChange}
-              className="w-full p-3 rounded bg-white/6 border border-white/10"
-            >
-              <option value="traditional">Traditional</option>
-              <option value="reverse">Reverse</option>
-              <option value="sealed">Sealed</option>
-            </select>
-          </div>
+        <label className="block mb-2 text-sm">Start Price</label>
+        <input
+          name="startPrice"
+          value={form.startPrice}
+          onChange={change}
+          className="w-full p-2 rounded bg-white/10 mb-4"
+        />
 
-          <div>
-            <label className="block text-sm mb-1">Min Increment</label>
-            <input
-              name="minIncrement"
-              value={form.minIncrement}
-              onChange={handleChange}
-              type="number"
-              className="w-full p-3 rounded bg-white/6 border border-white/10"
-            />
-          </div>
+        <label className="block mb-2 text-sm">Min Increment</label>
+        <input
+          name="minIncrement"
+          value={form.minIncrement}
+          onChange={change}
+          className="w-full p-2 rounded bg-white/10 mb-4"
+        />
 
-          <div>
-            <label className="block text-sm mb-1">Start Price (₹)</label>
-            <input
-              name="startPrice"
-              value={form.startPrice}
-              onChange={handleChange}
-              type="number"
-              className="w-full p-3 rounded bg-white/6 border border-white/10"
-            />
-          </div>
+        <label className="block mb-2 text-sm">Start At</label>
+        <input
+          name="startAt"
+          type="datetime-local"
+          value={form.startAt}
+          onChange={change}
+          className="w-full p-2 rounded bg-white/10 mb-4"
+        />
 
-          <div />
-        </div>
+        <label className="block mb-2 text-sm">End At</label>
+        <input
+          name="endAt"
+          type="datetime-local"
+          value={form.endAt}
+          onChange={change}
+          className="w-full p-2 rounded bg-white/10 mb-4"
+        />
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
-          <div>
-            <label className="block text-sm mb-1">Start At</label>
-            <input
-              name="startAt"
-              value={form.startAt}
-              onChange={handleChange}
-              type="datetime-local"
-              className="w-full p-3 rounded bg-white/6 border border-white/10"
-            />
-          </div>
-          <div>
-            <label className="block text-sm mb-1">End At</label>
-            <input
-              name="endAt"
-              value={form.endAt}
-              onChange={handleChange}
-              type="datetime-local"
-              className="w-full p-3 rounded bg-white/6 border border-white/10"
-            />
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-3 mt-5">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 rounded bg-white/10"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={saving}
-            className="px-4 py-2 rounded bg-green-600 flex items-center gap-2"
-          >
-            {saving ? (
-              <SmallSpinner />
-            ) : (
-              <>
-                <Icons.HiPlus /> Create Auction
-              </>
-            )}
-          </button>
-        </div>
+        <button
+          disabled={saving}
+          className="w-full py-2 rounded bg-yellow-400 text-black font-semibold mt-4"
+        >
+          {saving ? "Saving..." : "Create Auction"}
+        </button>
       </form>
     </div>
   );
 }
 
-/* ---------------------- Main Page ---------------------- */
-
+/* ============================================================
+   MAIN PAGE: SellerAuctions
+============================================================ */
 export default function SellerAuctions() {
   const { user, token } = useContext(AuthContext);
   const [auctions, setAuctions] = useState([]);
-  const [products, setProducts] = useState([]); // seller products
+  const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [actionLoadingId, setActionLoadingId] = useState(null);
-  const [error, setError] = useState("");
-  const [relistOpen, setRelistOpen] = useState(false);
-  const [relistProduct, setRelistProduct] = useState(null);
-  const [refreshToggle, setRefreshToggle] = useState(0);
+  const [actionLoad, setActionLoad] = useState(null);
 
-  // If your backend uses different path change these constants:
-  const CLOSE_PATH = (id) => `/auctions/${id}/close`;
-  const RELIST_PATH = `/auctions/relist`;
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalProduct, setModalProduct] = useState(null);
 
-  // Load auctions + products for seller
+  const refresh = () => setLoading(true); // triggers reload because useEffect depends on loading
+
+  /* -------------------------------
+     LOAD DATA
+  -------------------------------- */
   useEffect(() => {
-    let mounted = true;
+    if (!loading) return;
 
-    const load = async () => {
-      setLoading(true);
-      setError("");
+    const loadData = async () => {
       try {
         const [aRes, pRes] = await Promise.all([
           api.get("/auctions?my=true", {
@@ -373,464 +234,266 @@ export default function SellerAuctions() {
           }),
         ]);
 
-        const rawAuctions = Array.isArray(aRes.data)
-          ? aRes.data
-          : aRes.data?.auctions || [];
+        const aList = aRes.data?.auctions || aRes.data || [];
+        const pList = pRes.data?.products || pRes.data || [];
 
-        const rawProducts = Array.isArray(pRes.data)
-          ? pRes.data
-          : pRes.data?.products || [];
+        setProducts(pList);
 
-        // product map to attach when auction.product is just id
-        const productMap = new Map();
-        for (const p of rawProducts) {
-          const id = p._id || p.id;
-          if (id) productMap.set(String(id), p);
-        }
+        // Ensure auction.product is populated
+        const map = new Map(pList.map((p) => [p._id, p]));
+        const finalAuctions = aList.map((a) => ({
+          ...a,
+          product: a.product?._id ? a.product : map.get(a.product) || null,
+        }));
 
-        const sellerId = normalizeSellerId(user) || null;
-
-        const myAuctions = rawAuctions
-          .map((a) => {
-            const obj = { ...(a || {}) };
-
-            const prodRef =
-              obj.product || obj.productId || obj.product_id || null;
-            if (typeof prodRef === "string" && productMap.has(prodRef)) {
-              obj.product = productMap.get(prodRef);
-            } else if (prodRef && typeof prodRef === "object") {
-              const id = prodRef._id || prodRef.id;
-              if (id && productMap.has(String(id))) {
-                obj.product = productMap.get(String(id));
-              } else {
-                obj.product = prodRef;
-              }
-            } else {
-              // no product attached, keep null to display fallback
-              obj.product = null;
-            }
-
-            obj.seller = obj.seller || obj.sellerId || obj.seller_id || null;
-            return obj;
-          })
-          .filter((a) => {
-            // Only seller's auctions (defensive)
-            const s = normalizeSellerId(a.seller);
-            return s && sellerId && s === sellerId;
-          });
-
-        const myProducts = rawProducts.filter((p) => {
-          const s = normalizeSellerId(p.seller);
-          return s && sellerId && s === sellerId;
-        });
-
-        if (!mounted) return;
-        setAuctions(myAuctions);
-        setProducts(myProducts);
+        setAuctions(finalAuctions);
       } catch (err) {
-        console.error("Load seller auctions error:", err);
-        setError(
-          err?.response?.data?.message || err.message || "Failed to load"
-        );
+        console.error("Load error:", err);
       } finally {
-        if (mounted) setLoading(false);
+        setLoading(false);
       }
     };
 
-    load();
-    return () => {
-      mounted = false;
-    };
-  }, [token, user, refreshToggle]);
+    loadData();
+  }, [loading, token]);
 
-  const refresh = () => setRefreshToggle((s) => s + 1);
+  /* -------------------------------
+     CLOSE AUCTION
+  -------------------------------- */
+  const closeNow = async (id) => {
+    if (!confirm("Close auction now?")) return;
 
-  // counts
-  const counts = useMemo(() => {
-    const now = new Date();
-    const live = auctions.filter((a) => isAuctionLive(a, now)).length;
-    const upcoming = auctions.filter((a) => isAuctionUpcoming(a, now)).length;
-    const ended = auctions.filter((a) => isAuctionEnded(a, now)).length;
-    const unsold = products.filter(
-      (p) => (p.inventoryCount ?? 0) > 0 && p.status !== "sold"
-    ).length;
-    return { live, upcoming, ended, unsold };
-  }, [auctions, products]);
-
-  // Close auction now (seller-only). Uses CLOSE_PATH function above.
-  const closeNow = async (auctionId) => {
-    if (!confirm("Close this auction now? This will finalize the auction."))
-      return;
-
-    setActionLoadingId(auctionId);
+    setActionLoad(id);
     try {
-      const res = await api.put(
-        CLOSE_PATH(auctionId),
+      await api.put(
+        `/auctions/${id}/close`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
-
-      // success
       refresh();
-      return res.data;
     } catch (err) {
-      console.error("Close auction failed: ", err);
-      // common case: auction already closed -> backend may respond 400 or 409
-      const serverMessage = err?.response?.data?.message;
-      if (
-        err?.response?.status === 400 ||
-        err?.response?.status === 409 ||
-        /already closed/i.test(serverMessage || "")
-      ) {
-        alert(serverMessage || "Auction already closed.");
-        // ensure UI reflects actual state
-        refresh();
-      } else {
-        alert(serverMessage || err.message || "Failed to close auction.");
-      }
+      alert(err?.response?.data?.message || "Failed");
     } finally {
-      setActionLoadingId(null);
+      setActionLoad(null);
     }
   };
 
-  const openRelist = (product) => {
-    if (!product) {
-      alert("Product missing — cannot re-list. Fix product first.");
-      return;
-    }
-    setRelistProduct(product);
-    setRelistOpen(true);
-  };
+  /* -------------------------------
+     SUMMARY BOXES
+  -------------------------------- */
+  const counts = useMemo(() => {
+    return {
+      live: auctions.filter(isLive).length,
+      upcoming: auctions.filter(isUpcoming).length,
+      ended: auctions.filter(isEnded).length,
+      unsold: products.filter((p) => p.status === "unsold").length,
+    };
+  }, [auctions, products]);
 
-  const renderStatus = (a) => {
-    const now = new Date();
-    if (a?.status === "closed" || isAuctionEnded(a, now)) {
-      return <Badge color="bg-rose-300">Ended</Badge>;
-    } else if (a?.status === "upcoming" || isAuctionUpcoming(a, now)) {
-      return <Badge color="bg-yellow-300">Upcoming</Badge>;
-    } else {
-      return <Badge color="bg-green-300">Live</Badge>;
-    }
-  };
-
-  const primaryImage = (product) => {
-    if (!product) return null;
-    if (Array.isArray(product.images) && product.images.length)
-      return product.images[0];
-    if (product.image) return product.image;
-    return null;
-  };
-
-  /* ---------------------- Render ---------------------- */
-
+  /* ============================================================
+     RENDER
+  ============================================================ */
   return (
-    <div className="min-h-screen pt-28 pb-24 bg-linear-to-br from-[#071029] to-[#0b1220] text-white">
+    <div className="min-h-screen pt-28 pb-24 bg-[#070D1A] text-white">
       <div className="max-w-6xl mx-auto px-6">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8 gap-4">
+        {/* HEADER */}
+        <div className="flex justify-between mb-8">
           <div>
-            <h1 className="text-4xl font-extrabold">Seller Auctions</h1>
-            <p className="text-white/70 mt-1">
-              Manage & monitor all auctions you created — live, upcoming, and
-              ended.
-            </p>
+            <h1 className="text-3xl font-bold">Seller Auctions</h1>
+            <p className="text-white/60">Manage all your auctions.</p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex gap-3">
             <button
               onClick={refresh}
-              className="flex items-center gap-2 px-4 py-2 rounded bg-white/5 hover:bg-white/10 transition"
+              className="px-4 py-2 bg-white/10 rounded hover:bg-white/20"
             >
-              <Icons.HiRefresh className="w-5 h-5" /> Refresh
+              <Icons.HiRefresh className="inline-block mr-1" /> Refresh
             </button>
-
             <button
               onClick={() => (window.location.href = "/seller/create-auction")}
-              className="flex items-center gap-2 px-4 py-2 rounded bg-yellow-400 text-black font-semibold"
+              className="px-4 py-2 bg-yellow-400 text-black font-semibold rounded"
             >
-              <Icons.HiPlus className="w-5 h-5" /> + Create Auction
+              <Icons.HiPlus className="inline-block mr-1" /> Create Auction
             </button>
           </div>
         </div>
 
-        {/* Summary */}
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
-          <div className="p-5 rounded-2xl bg-white/5 border border-white/10 shadow">
-            <div className="text-sm text-white/70">Live</div>
-            <div className="text-2xl font-bold">{counts.live}</div>
-            <div className="text-xs text-white/60 mt-1">Currently running</div>
-          </div>
-          <div className="p-5 rounded-2xl bg-white/5 border border-white/10 shadow">
-            <div className="text-sm text-white/70">Upcoming</div>
-            <div className="text-2xl font-bold">{counts.upcoming}</div>
-            <div className="text-xs text-white/60 mt-1">Scheduled</div>
-          </div>
-          <div className="p-5 rounded-2xl bg-white/5 border border-white/10 shadow">
-            <div className="text-sm text-white/70">Ended</div>
-            <div className="text-2xl font-bold">{counts.ended}</div>
-            <div className="text-xs text-white/60 mt-1">Completed</div>
-          </div>
-          <div className="p-5 rounded-2xl bg-white/5 border border-white/10 shadow">
-            <div className="text-sm text-white/70">Inventory (unsold)</div>
-            <div className="text-2xl font-bold">{counts.unsold}</div>
-            <div className="text-xs text-white/60 mt-1">Products available</div>
-          </div>
+        {/* SUMMARY */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <SummaryBox title="Live" count={counts.live} color="text-green-300" />
+          <SummaryBox
+            title="Upcoming"
+            count={counts.upcoming}
+            color="text-yellow-300"
+          />
+          <SummaryBox
+            title="Ended"
+            count={counts.ended}
+            color="text-rose-300"
+          />
+          <SummaryBox
+            title="Unsold Products"
+            count={counts.unsold}
+            color="text-blue-300"
+          />
         </div>
 
-        {/* Body */}
+        {/* MAIN TABLE */}
         {loading ? (
-          <div className="py-20 text-center">
-            <SmallSpinner />
-            <div className="mt-4 text-white/70">Loading auctions...</div>
-          </div>
-        ) : error ? (
-          <div className="py-10 text-center text-rose-300">{error}</div>
+          <div className="text-center py-10">Loading...</div>
         ) : auctions.length === 0 ? (
-          <div className="py-20 text-center text-white/70">
-            No auctions found — create your first auction.
+          <div className="text-center text-white/60 py-10">
+            No auctions found.
           </div>
         ) : (
-          <>
-            {/* Desktop table */}
-            <div className="hidden lg:block bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
-              <table className="w-full">
-                <thead className="text-white/60 text-left">
-                  <tr>
-                    <th className="p-4">Product</th>
-                    <th className="p-4">Type</th>
-                    <th className="p-4">Start Price</th>
-                    <th className="p-4">Timing</th>
-                    <th className="p-4">Status</th>
-                    <th className="p-4">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {auctions.map((a) => (
-                    <tr key={a._id || a.id} className="border-t border-white/6">
-                      <td className="p-4 flex items-center gap-3">
-                        <div className="w-24 h-16 bg-black/30 rounded overflow-hidden">
-                          {primaryImage(a.product) ? (
-                            <img
-                              src={primaryImage(a.product)}
-                              alt={a.product?.title || "product"}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-white/50">
-                              No image
-                            </div>
-                          )}
-                        </div>
-                        <div>
-                          <div className="font-semibold text-lg">
-                            {a.product?.title ||
-                              a.product?.name ||
-                              "(Product missing)"}
-                          </div>
-                          <div className="text-sm text-white/60">
-                            {a.product?.category ||
-                              a.product?.categoryName ||
-                              "-"}
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="p-4 capitalize">{a.type || "-"}</td>
-
-                      <td className="p-4">
-                        <div className="text-lg font-semibold">
-                          ₹{a.startPrice ?? "-"}
-                        </div>
-                        <div className="text-xs text-white/60">
-                          inc {a.minIncrement ?? "-"}
-                        </div>
-                      </td>
-
-                      {/* Timing cell with live countdown */}
-                      <td className="p-4">
-                        <div className="text-xs text-white/50">
-                          Starts:{" "}
-                          {a.startAt
-                            ? new Date(a.startAt).toLocaleString()
-                            : "-"}
-                        </div>
-
-                        {isAuctionLive(a) ? (
-                          <div className="mt-2">
-                            <div className="text-xs text-white/60 mb-1">
-                              Ends In:
-                            </div>
-                            <LiveCountdown endAt={a.endAt} />
-                          </div>
-                        ) : (
-                          <div className="text-xs text-white/40 mt-2">
-                            Ends:{" "}
-                            {a.endAt ? new Date(a.endAt).toLocaleString() : "-"}
-                          </div>
-                        )}
-                      </td>
-
-                      <td className="p-4">{renderStatus(a)}</td>
-
-                      <td className="p-4">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() =>
-                              (window.location.href = `/auction/${
-                                a._id || a.id
-                              }`)
-                            }
-                            className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-700"
-                          >
-                            View
-                          </button>
-
-                          <button
-                            disabled={actionLoadingId === (a._id || a.id)}
-                            onClick={() => closeNow(a._id || a.id)}
-                            className="px-3 py-1 rounded bg-rose-500 hover:bg-rose-600"
-                          >
-                            {actionLoadingId === (a._id || a.id) ? (
-                              <SmallSpinner />
-                            ) : (
-                              "Close Now"
-                            )}
-                          </button>
-
-                          <button
-                            disabled={a.product?.status !== "unsold"}
-                            onClick={() => openRelist(a.product)}
-                            className={`px-3 py-1 rounded text-black ${
-                              a.product?.status === "unsold"
-                                ? "bg-yellow-300"
-                                : "bg-gray-500 cursor-not-allowed"
-                            }`}
-                          >
-                            Re-list
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Mobile cards */}
-            <div className="grid lg:hidden grid-cols-1 gap-4">
-              {auctions.map((a) => {
-                const startLabel = a.startAt
-                  ? formatDistanceToNowStrict(new Date(a.startAt), {
-                      addSuffix: true,
-                    })
-                  : "-";
-                const endLabel = a.endAt
-                  ? formatDistanceToNowStrict(new Date(a.endAt), {
-                      addSuffix: true,
-                    })
-                  : "-";
-                return (
-                  <div
-                    key={a._id || a.id}
-                    className="bg-white/5 p-4 rounded-2xl border border-white/10 shadow"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-20 h-16 bg-black/30 rounded overflow-hidden">
-                        {primaryImage(a.product) ? (
-                          <img
-                            src={primaryImage(a.product)}
-                            alt={a.product?.title}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-white/50">
-                            No image
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex-1">
-                        <div className="font-semibold">
-                          {a.product?.title || "(Product missing)"}
-                        </div>
-                        <div className="text-xs text-white/60">
-                          {a.product?.category || "-"}
-                        </div>
-
-                        <div className="mt-2">
-                          {isAuctionLive(a) ? (
-                            <>
-                              <div className="text-xs text-white/60 mb-1">
-                                Ends In:
-                              </div>
-                              <LiveCountdown endAt={a.endAt} />
-                            </>
-                          ) : (
-                            <>
-                              <div className="text-xs text-white/50">
-                                Starts:{" "}
-                                <span className="font-medium">
-                                  {startLabel}
-                                </span>
-                              </div>
-                              <div className="text-xs text-white/50">
-                                Ends:{" "}
-                                <span className="font-medium">{endLabel}</span>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-3 flex items-center justify-between">
-                      <div>{renderStatus(a)}</div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() =>
-                            (window.location.href = `/auction/${a._id || a.id}`)
-                          }
-                          className="px-3 py-1 rounded bg-blue-600"
-                        >
-                          View
-                        </button>
-                        <button
-                          disabled={actionLoadingId === (a._id || a.id)}
-                          onClick={() => closeNow(a._id || a.id)}
-                          className="px-3 py-1 rounded bg-rose-500"
-                        >
-                          {actionLoadingId === (a._id || a.id) ? (
-                            <SmallSpinner />
-                          ) : (
-                            "Close"
-                          )}
-                        </button>
-                        <button
-                          onClick={() => openRelist(a.product)}
-                          className="px-3 py-1 rounded bg-yellow-300 text-black"
-                        >
-                          Re-list
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </>
+          <AuctionTable
+            auctions={auctions}
+            closeNow={closeNow}
+            actionLoad={actionLoad}
+            setModalOpen={setModalOpen}
+            setModalProduct={setModalProduct}
+          />
         )}
       </div>
 
       <ReListModal
-        open={relistOpen}
-        onClose={() => setRelistOpen(false)}
-        product={relistProduct}
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        product={modalProduct}
         token={token}
-        onCreated={() => {
-          setRelistOpen(false);
-          refresh();
-        }}
+        onDone={refresh}
       />
     </div>
   );
 }
+
+/* ============================================================
+   SUMMARY BOX
+============================================================ */
+const SummaryBox = ({ title, count, color }) => (
+  <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+    <div className="text-sm text-white/60">{title}</div>
+    <div className={`text-2xl font-bold ${color}`}>{count}</div>
+  </div>
+);
+
+/* ============================================================
+   TABLE VIEW
+============================================================ */
+const AuctionTable = ({
+  auctions,
+  closeNow,
+  actionLoad,
+  setModalOpen,
+  setModalProduct,
+}) => {
+  const img = (p) =>
+    p?.images?.[0] || "https://via.placeholder.com/150?text=No+Image";
+
+  return (
+    <div className="hidden lg:block bg-white/5 rounded-2xl border border-white/10">
+      <table className="w-full">
+        <thead>
+          <tr className="text-white/60">
+            <th className="p-4">Product</th>
+            <th className="p-4">Type</th>
+            <th className="p-4">Start Price</th>
+            <th className="p-4">Timing</th>
+            <th className="p-4">Status</th>
+            <th className="p-4">Actions</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {auctions.map((a) => (
+            <tr key={a._id} className="border-t border-white/10">
+              <td className="p-4 flex gap-3 items-center">
+                <img
+                  src={img(a.product)}
+                  alt=""
+                  className="w-24 h-16 rounded object-cover"
+                />
+                <div>
+                  <div className="font-semibold">{a.product?.title}</div>
+                  <div className="text-white/50 text-sm">
+                    {a.product?.category}
+                  </div>
+                </div>
+              </td>
+
+              <td className="p-4 capitalize">{a.type}</td>
+
+              <td className="p-4">
+                <div className="font-semibold text-lg">₹{a.startPrice}</div>
+                <div className="text-xs text-white/50">
+                  min inc: {a.minIncrement}
+                </div>
+              </td>
+
+              <td className="p-4">
+                {isLive(a) ? (
+                  <LiveCountdown endAt={a.endAt} />
+                ) : (
+                  <span className="text-sm text-white/50">
+                    Ends{" "}
+                    {formatDistanceToNowStrict(new Date(a.endAt), {
+                      addSuffix: true,
+                    })}
+                  </span>
+                )}
+              </td>
+
+              <td className="p-4">
+                {isEnded(a) ? (
+                  <Badge text="Ended" color="bg-rose-400/20 text-rose-300" />
+                ) : isUpcoming(a) ? (
+                  <Badge
+                    text="Upcoming"
+                    color="bg-yellow-400/20 text-yellow-300"
+                  />
+                ) : (
+                  <Badge text="Live" color="bg-green-400/20 text-green-300" />
+                )}
+              </td>
+
+              <td className="p-4">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => (window.location.href = `/auction/${a._id}`)}
+                    className="px-3 py-1 bg-blue-600 rounded"
+                  >
+                    View
+                  </button>
+
+                  <button
+                    disabled={actionLoad === a._id}
+                    onClick={() => closeNow(a._id)}
+                    className="px-3 py-1 bg-rose-500 rounded"
+                  >
+                    {actionLoad === a._id ? "..." : "Close"}
+                  </button>
+
+                  <button
+                    disabled={a.product?.status !== "unsold"}
+                    onClick={() => {
+                      setModalProduct(a.product);
+                      setModalOpen(true);
+                    }}
+                    className={`px-3 py-1 rounded ${
+                      a.product?.status === "unsold"
+                        ? "bg-yellow-300 text-black"
+                        : "bg-gray-600 opacity-50"
+                    }`}
+                  >
+                    Re-list
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};

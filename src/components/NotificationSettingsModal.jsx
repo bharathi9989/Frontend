@@ -1,3 +1,4 @@
+// src/components/NotificationSettingsModal.jsx
 import React, { useState } from "react";
 import api from "../api/axios";
 
@@ -9,23 +10,36 @@ export default function NotificationSettingsModal({
 }) {
   if (!open) return null;
 
-  const [form, setForm] = useState(settings);
+  const safeSettings = settings || {
+    outbid: true,
+    win: true,
+    auctionStart: true,
+    auctionEnd: true,
+  };
+
+  const [form, setForm] = useState({ ...safeSettings });
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
 
   const toggle = (key) => {
-    setForm({ ...form, [key]: !form[key] });
+    setForm((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
   };
 
   const save = async () => {
     setLoading(true);
     try {
       const res = await api.put("/profile/notifications", form);
-      onUpdate(res.data.settings);
+      const updated = res.data?.settings || form;
+
+      onUpdate(updated);
       setMsg("Updated successfully!");
+
       setTimeout(() => onClose(), 800);
     } catch (err) {
-      setMsg("Failed to update");
+      setMsg("Failed to update settings");
     } finally {
       setLoading(false);
     }
@@ -63,7 +77,7 @@ export default function NotificationSettingsModal({
                   className={`w-6 h-6 bg-white rounded-full transform transition ${
                     form[key] ? "translate-x-7" : "translate-x-1"
                   }`}
-                ></div>
+                />
               </button>
             </div>
           ))}

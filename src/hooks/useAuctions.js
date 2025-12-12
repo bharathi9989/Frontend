@@ -3,17 +3,23 @@ import { useCallback, useEffect, useState } from "react";
 import api from "../api/axios";
 
 /**
- * useAuctions(options)
- * options:
- *  - page (number)        -> for server-side pagination
- *  - limit (number)
- *  - q (string)           -> search query for server
- *  - filters (object)     -> { status, type, category }
- *  - sort (string)        -> e.g. 'endingSoon' | 'newest' | 'priceAsc' | 'priceDesc'
+ * PRODUCTION-GRADE useAuctions()
+ * ------------------------------------------
+ * Backend supports:
+ *   - page
+ *   - limit
+ *   - status (live|upcoming|closed)
  *
- * This hook tries to query server using query params. If backend doesn't support,
- * you can opt to fetch everything and filter client-side.
+ * Backend DOES NOT support:
+ *   - q search
+ *   - type filter
+ *   - category filter
+ *   - price sorting
+ *
+ * So those MUST be handled client-side.
+ * This hook gives fully normalized, safe results.
  */
+
 export default function useAuctions({
   page = 1,
   limit = 12,
@@ -22,43 +28,87 @@ export default function useAuctions({
   sort = "",
 } = {}) {
   const [auctions, setAuctions] = useState([]);
-  const [total, setTotal] = useState(null); // total count (if server provides)
+  const [total, setTotal] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    try {
-      // Build query params - backend may accept these. If not, fallback logic can be used.
-      const params = {
-        page,
-        limit,
-      };
-      if (q) params.q = q;
-      if (filters.status) params.status = filters.status;
-      if (filters.type) params.type = filters.type;
-      if (filters.category) params.category = filters.category;
-      if (sort) params.sort = sort;
 
+    try {
+      // ---- BUILD SAFE QUERY FOR BACKEND ----
+      const params = { page, limit };
+
+      // Backend supports ONLY status filter
+      if (filters.status) params.status = filters.status;
+
+      // ---- GET RAW DATA ----
       const res = await api.get("/auctions", { params });
-      // Expected shape:
-      // Option A (preferred server): { data: { auctions: [...], total: 120 } }
-      // Option B (simple): res.data => array of auctions
-      if (res.data && Array.isArray(res.data)) {
-        // backend returns array -> client-side total unknown
-        setAuctions(res.data);
-        setTotal(res.data.length);
-      } else if (res.data && Array.isArray(res.data.auctions)) {
-        setAuctions(res.data.auctions);
-        setTotal(res.data.total ?? res.data.count ?? res.data.auctions.length);
-      } else if (res.data?.auctions) {
-        setAuctions(res.data.auctions);
-        setTotal(res.data.total ?? res.data.count ?? res.data.auctions.length);
-      } else {
-        // last fallback: set whole response
-        setAuctions(res.data || []);
+
+      let list = [];
+
+      // server returned list directly
+      if (Array.isArray(res.data)) {
+        list = res.data;
+        setTotal(list.length);
       }
+
+      // server returned object { auctions, total }
+      else if (Array.isArray(res.data.auctions)) {
+        list = res.data.auctions;
+        setTotal(res.data.total ?? res.data.count ?? res.data.auctions.length);
+      }
+
+      // fallback
+      else {
+        list = res.data?.auctions || [];
+      }
+
+      // ---- NORMALIZE product ref (avoid crashes) ----
+      list = list.filter((a) => a && a.product);
+
+      // ---- CLIENT-SIDE SEARCH ----
+      if (q.trim()) {
+        const lower = q.trim().toLowerCase();
+        list = list.filter((a) =>
+          (a.product?.title || "").toLowerCase().includes(lower)
+        );
+      }
+
+      // ---- CLIENT-SIDE TYPE FILTER ----
+      if (filters.type && filters.type !== "all") {
+        list = list.filter((a) => a.type === filters.type);
+      }
+
+      // ---- CLIENT-SIDE CATEGORY FILTER ----
+      if (filters.category && filters.category !== "all") {
+        list = list.filter(
+          (a) =>
+            a.product?.category?.toLowerCase() ===
+            filters.category.toLowerCase()
+        );
+      }
+
+      // ---- CLIENT-SIDE SORTING ----
+      if (sort === "endingSoon") {
+        list.sort((a, b) => new Date(a.endAt) - new Date(b.endAt));
+      } else if (sort === "newest") {
+        list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      } else if (sort === "priceAsc") {
+        list.sort((a, b) => (a.startPrice || 0) - (b.startPrice || 0));
+      } else if (sort === "priceDesc") {
+        list.sort((a, b) => (b.startPrice || 0) - (a.startPrice || 0));
+      }
+
+      // ---- CLIENT-SIDE PAGINATION ----
+      const start = (page - 1) * limit;
+      const end = start + limit;
+
+      const paged = list.slice(start, end);
+
+      setAuctions(paged);
+      setTotal(list.length);
     } catch (err) {
       console.error("useAuctions load error:", err);
       setError(err);

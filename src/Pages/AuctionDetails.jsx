@@ -1,45 +1,94 @@
 // src/pages/AuctionDetailsDark.jsx
-import React, { useEffect, useState, useRef, useContext } from "react";
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  useContext,
+  useCallback,
+} from "react";
 import { useParams } from "react-router-dom";
 import api from "../api/axios";
 import { AuthContext } from "../context/AuthContext";
-import { initSocket, getSocket } from "../utils/socket"; // ensure this exists
+import { initSocket, getSocket } from "../utils/socket";
+import { formatDistanceToNowStrict } from "date-fns";
 
-/* =========================
-   Helper components (inline)
-   - BidForm: handles input + validation
-   - BidList: shows bids (sorted by type)
-   ========================= */
-function BidForm({ minRequired, onSubmit, disabled }) {
+function SmallSpinner({ size = 4 }) {
+  return (
+    <div
+      style={{ width: size * 4, height: size * 4 }}
+      className="border-2 border-yellow-300/40 border-t-yellow-300 rounded-full animate-spin"
+      aria-hidden="true"
+    />
+  );
+}
+
+/* -------------------- BidForm Component -------------------- */
+/*
+  Props:
+    - minRequired: number | null
+    - type: "traditional" | "reverse" | "sealed"
+    - onSubmit(amount) => Promise
+    - disabled: boolean
+*/
+function BidForm({ minRequired, type = "traditional", onSubmit, disabled }) {
   const [val, setVal] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // validate + submit
   const submit = async (e) => {
     e?.preventDefault();
-    if (disabled) return alert("Auction not live");
+    if (disabled) return alert("Auction not live.");
     const amount = Number(val);
-    if (!amount || amount <= 0) return alert("Enter valid amount");
-    if (minRequired != null && amount < minRequired)
-      return alert(`Bid must be at least ₹${minRequired}`);
+    if (!Number.isFinite(amount)) return alert("Enter a valid numeric amount.");
+    if (amount <= 0) return alert("Amount must be > 0.");
+
+    // Reverse auction: next bid must be strictly LOWER than current "minRequired" (which is computed as next allowed)
+    if (type === "reverse") {
+      // minRequired is computed as "next allowed" which is lower than current lowest. For UX we may show current lowest too.
+      if (minRequired == null) return alert("Invalid auction state.");
+      if (!(amount <= minRequired)) {
+        return alert(
+          `For reverse auctions, bid must be ≤ ₹${minRequired} (lower is better).`
+        );
+      }
+    } else {
+      // Traditional/sealed: amount must be >= minRequired
+      if (minRequired != null && amount < minRequired) {
+        return alert(`Minimum required bid is ₹${minRequired}`);
+      }
+    }
+
     setBusy(true);
     try {
       await onSubmit(amount);
       setVal("");
     } catch (err) {
+      // bubble message
       alert(err?.message || "Bid failed");
     } finally {
       setBusy(false);
     }
   };
 
+  const placeholder =
+    type === "reverse"
+      ? minRequired
+        ? `Place <= ₹${minRequired} (lower wins)`
+        : "Place a bid"
+      : minRequired
+      ? `Min ₹${minRequired}`
+      : "Place a bid";
+
   return (
     <form onSubmit={submit} className="flex gap-3">
       <input
         type="number"
+        inputMode="numeric"
         min="0"
+        step="1"
         value={val}
         onChange={(e) => setVal(e.target.value)}
-        placeholder={minRequired ? `Min ₹${minRequired}` : "Enter bid amount"}
+        placeholder={placeholder}
         className="flex-1 p-3 bg-[#0b0b0b] border border-yellow-900/40 rounded text-white outline-none"
         disabled={disabled || busy}
       />
@@ -54,14 +103,24 @@ function BidForm({ minRequired, onSubmit, disabled }) {
   );
 }
 
+/* -------------------- BidList Component -------------------- */
+/*
+  Props:
+    - bids: array
+    - type: auction type
+*/
 function BidList({ bids = [], type = "traditional" }) {
   if (!bids || bids.length === 0)
     return <div className="text-yellow-200/40">No bids yet</div>;
 
+  // sort: reverse -> ascending (lowest first), traditional -> descending (highest first)
   const sorted =
     type === "reverse"
-      ? [...bids].sort((a, b) => a.amount - b.amount)
-      : [...bids].sort((a, b) => b.amount - a.amount);
+      ? [...bids].sort((a, b) => Number(a.amount) - Number(b.amount))
+      : [...bids].sort((a, b) => Number(b.amount) - Number(a.amount));
+
+  // compute lowest/highest for quick checks
+  const topAmount = sorted[0] ? Number(sorted[0].amount) : null;
 
   return (
     <div className="space-y-3">
@@ -78,17 +137,74 @@ function BidList({ bids = [], type = "traditional" }) {
               {new Date(b.createdAt).toLocaleString()}
             </div>
           </div>
-          <div className="text-yellow-300 font-bold">₹{b.amount}</div>
+
+          <div
+            className={
+              type === "reverse" && Number(b.amount) === topAmount
+                ? "text-green-300 font-bold"
+                : "text-yellow-300 font-bold"
+            }
+          >
+            ₹{b.amount}
+          </div>
         </div>
       ))}
     </div>
   );
 }
 
-/* =========================
-   Main component
-   ========================= */
-export default function AuctionDetailsDark() {
+/* -------------------- Utility helpers -------------------- */
+
+const computeStatus = (a) => {
+  if (!a) return "unknown";
+  if (a.status === "closed") return "closed";
+  const now = Date.now();
+  const start = new Date(a.startAt).getTime();
+  const end = new Date(a.endAt).getTime();
+  if (now < start) return "upcoming";
+  if (now > end) return "ended";
+  return "live";
+};
+
+/**
+ * computeMinRequired:
+ * - traditional/sealed: highestBid + minIncrement (or startPrice if no bids)
+ * - reverse: next allowed = lowestBid - minIncrement (or startPrice if no bids)
+ *   ensure non-negative and integer math
+ */
+const computeMinRequired = (a, bidsList) => {
+  if (!a) return null;
+  const minInc = Number(a.minIncrement || 1);
+  if (a.type === "reverse") {
+    if (!bidsList || bidsList.length === 0) return Number(a.startPrice || 0);
+    const lowest = Math.min(...bidsList.map((x) => Number(x.amount)));
+    const next = Math.max(0, lowest - minInc);
+    return next;
+  } else {
+    if (!bidsList || bidsList.length === 0) return Number(a.startPrice || 0);
+    const highest = Math.max(...bidsList.map((x) => Number(x.amount)));
+    return highest + minInc;
+  }
+};
+
+const computeWinner = (a, bidsList) => {
+  if (!a || !bidsList || bidsList.length === 0) return null;
+  if (a.type === "reverse") {
+    return bidsList.reduce(
+      (acc, b) => (Number(b.amount) < Number(acc.amount) ? b : acc),
+      bidsList[0]
+    );
+  } else {
+    return bidsList.reduce(
+      (acc, b) => (Number(b.amount) > Number(acc.amount) ? b : acc),
+      bidsList[0]
+    );
+  }
+};
+
+/* -------------------- Main Component -------------------- */
+
+export default function AuctionDetails() {
   const { id } = useParams();
   const { user, token } = useContext(AuthContext);
 
@@ -99,145 +215,86 @@ export default function AuctionDetailsDark() {
   const [countdown, setCountdown] = useState(null); // {type, days,hours,minutes,seconds}
   const socketRef = useRef(null);
 
-  // ---------- helper: compute status ----------
-  const computeStatus = (a) => {
-    if (!a) return "unknown";
-    const now = new Date();
-    const start = new Date(a.startAt);
-    const end = new Date(a.endAt);
+  // ------- load auction + product + bids with fallbacks -------
+  const loadAuction = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Try /auctions/:id
+      const res = await api.get(`/auctions/${id}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const payload = res.data;
+      const a = payload?.auction || payload;
+      if (!a) throw new Error("Auction payload malformed");
+      setAuction(a);
 
-    if (a.status === "closed") return "closed"; // respect persisted status
-    if (now < start) return "upcoming";
-    if (now > end) return "ended";
-    return "live";
-  };
-
-  // ---------- compute min required bid based on auction type ----------
-  const computeMinRequired = (a, bidsList) => {
-    if (!a) return null;
-    if (a.type === "reverse") {
-      if (!bidsList || bidsList.length === 0) return a.startPrice;
-      const lowest = Math.min(...bidsList.map((x) => Number(x.amount)));
-      return Math.max(0, lowest - (a.minIncrement || 0));
-    } else {
-      if (!bidsList || bidsList.length === 0) return a.startPrice;
-      const highest = Math.max(...bidsList.map((x) => Number(x.amount)));
-      return highest + (a.minIncrement || 0);
-    }
-  };
-
-  // ---------- compute winner client-side if auction ended/closed ----------
-  const computeWinner = (a, bidsList) => {
-    if (!a || !bidsList || bidsList.length === 0) return null;
-    if (a.type === "reverse") {
-      // lowest wins
-      const lowest = bidsList.reduce(
-        (acc, b) => (b.amount < acc.amount ? b : acc),
-        bidsList[0]
-      );
-      return lowest;
-    } else {
-      // traditional/sealed: highest wins
-      const highest = bidsList.reduce(
-        (acc, b) => (b.amount > acc.amount ? b : acc),
-        bidsList[0]
-      );
-      return highest;
-    }
-  };
-
-  // ---------- load auction, product and bids ----------
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      try {
-        setLoading(true);
-        // GET /api/auctions/:id (should return { auction, bids } or auction)
-        const res = await api.get(`/auctions/${id}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-
-        const payload = res.data;
-        // accept either { auction, bids } or auction object
-        const a = payload.auction || payload;
-        if (!mounted) return;
-        setAuction(a);
-
-        // Handle product: could be populated object OR id
-        const productCandidate = a.product || a.productId || a.product;
-        if (
-          productCandidate &&
-          typeof productCandidate === "object" &&
-          productCandidate.title
-        ) {
-          setProduct(productCandidate);
-        } else if (productCandidate) {
-          // try GET /api/products/:id (if exists), fallback to /api/products then filter
-          const pid = productCandidate.toString
-            ? productCandidate.toString()
-            : productCandidate;
-          try {
-            const pRes = await api.get(`/products/${pid}`, {
-              headers: token ? { Authorization: `Bearer ${token}` } : {},
-            });
-            const p = pRes.data.product || pRes.data;
-            setProduct(p);
-          } catch (err) {
-            // fallback fetch all and filter by id
-            try {
-              const all = await api.get("/products", {
-                headers: token ? { Authorization: `Bearer ${token}` } : {},
-              });
-              const list = Array.isArray(all.data)
-                ? all.data
-                : all.data.products || [];
-              const found = list.find(
-                (pp) =>
-                  pp._id === pid ||
-                  pp.id === pid ||
-                  (pp._id && pp._id.toString() === pid)
-              );
-              setProduct(found || null);
-            } catch (err2) {
-              setProduct(null);
-            }
-          }
-        } else {
-          setProduct(null);
-        }
-
-        // BIDS: use payload.bids if present else fetch /bids/:auctionId
-        let incomingBids = payload.bids || payload.bids || [];
-        if (!Array.isArray(incomingBids) || incomingBids.length === 0) {
-          try {
-            const br = await api.get(`/bids/${id}`, {
-              headers: token ? { Authorization: `Bearer ${token}` } : {},
-            });
-            incomingBids = Array.isArray(br.data)
-              ? br.data
-              : br.data.bids || [];
-          } catch (err) {
-            incomingBids = [];
-          }
-        }
+      // set bids if included
+      const incomingBids = Array.isArray(payload?.bids) ? payload.bids : [];
+      if (incomingBids.length > 0) {
         setBids(incomingBids);
-      } catch (err) {
-        console.error("Load auction error", err);
-      } finally {
-        if (mounted) setLoading(false);
+      } else {
+        // try hits: GET /bids/:auctionId or /bids?auctionId=...
+        try {
+          const br = await api.get(`/bids/${id}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+          const list = Array.isArray(br.data) ? br.data : br.data?.bids || [];
+          setBids(list);
+        } catch (err) {
+          // fallback to empty bids
+          setBids([]);
+        }
       }
-    };
 
-    load();
-    return () => {
-      mounted = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      // product: may be populated object or id reference
+      const pRef = a.product || a.productId || null;
+      if (pRef && typeof pRef === "object" && pRef.title) {
+        setProduct(pRef);
+      } else if (pRef) {
+        const pid = pRef.toString ? pRef.toString() : pRef;
+        try {
+          const pRes = await api.get(`/products/${pid}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+          const p = pRes.data?.product || pRes.data;
+          setProduct(p || null);
+        } catch (err) {
+          // fallback: fetch list and pick
+          try {
+            const all = await api.get("/products", {
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
+            const arr = Array.isArray(all.data)
+              ? all.data
+              : all.data?.products || [];
+            const found = arr.find(
+              (pp) => pp._id === pid || String(pp._id) === pid || pp.id === pid
+            );
+            setProduct(found || null);
+          } catch {
+            setProduct(null);
+          }
+        }
+      } else {
+        setProduct(null);
+      }
+    } catch (err) {
+      console.error("Load auction error:", err);
+      setAuction(null);
+      setProduct(null);
+      setBids([]);
+    } finally {
+      setLoading(false);
+    }
   }, [id, token]);
 
-  // ---------- socket init & listeners (real-time updates) ----------
   useEffect(() => {
-    initSocket(); // ensure connection
+    loadAuction();
+  }, [loadAuction]);
+
+  // ------- socket init & listeners -------
+  useEffect(() => {
+    initSocket(); // create socket connection if not already
     const socket = getSocket();
     socketRef.current = socket;
     if (!socket) return;
@@ -245,34 +302,48 @@ export default function AuctionDetailsDark() {
     socket.emit("joinAuction", id);
 
     const onNewBid = (payload) => {
-      if (payload.auctionId !== id) return;
-      const newBid = payload.bid || {
+      // payload might be { auctionId, bid } or { auctionId, amount, bidder, time }
+      if (!payload || payload.auctionId !== id) return;
+      const newBid = payload.bid || payload;
+      // Ensure bid object shape
+      const bidObj = {
         _id:
-          payload.bidId || payload.time || Math.random().toString(36).slice(2),
-        amount: payload.amount,
-        bidder: payload.bidder,
-        createdAt: payload.time || new Date().toISOString(),
+          newBid._id ||
+          newBid.bidId ||
+          `${Math.random().toString(36).slice(2)}`,
+        amount: Number(newBid.amount),
+        bidder: newBid.bidder || {},
+        createdAt: newBid.createdAt || newBid.time || new Date().toISOString(),
       };
-      setBids((prev) => [newBid, ...prev]);
+      setBids((prev) => [bidObj, ...prev]);
     };
 
     const onAuctionClosed = (payload) => {
-      if (payload.auctionId !== id) return;
-      // update auction status to closed
-      setAuction((a) => (a ? { ...a, status: "closed" } : a));
+      if (!payload || payload.auctionId !== id) return;
+      setAuction((a) =>
+        a
+          ? {
+              ...a,
+              status: "closed",
+              winnerBid: payload.winner?.id ? payload.winner : a.winnerBid,
+            }
+          : a
+      );
     };
 
     socket.on("newBid", onNewBid);
     socket.on("auctionClosed", onAuctionClosed);
 
     return () => {
-      socket.emit("leaveAuction", id);
+      try {
+        socket.emit("leaveAuction", id);
+      } catch (e) {}
       socket.off("newBid", onNewBid);
       socket.off("auctionClosed", onAuctionClosed);
     };
   }, [id]);
 
-  // ---------- countdown timer ----------
+  // ------- countdown (client-side) -------
   useEffect(() => {
     if (!auction) {
       setCountdown(null);
@@ -280,11 +351,16 @@ export default function AuctionDetailsDark() {
     }
     let mounted = true;
     const update = () => {
-      const now = new Date().getTime();
-      const end = new Date(auction.endAt).getTime();
+      const now = Date.now();
       const start = new Date(auction.startAt).getTime();
+      const end = new Date(auction.endAt).getTime();
+
+      if (isNaN(start) || isNaN(end)) {
+        if (mounted) setCountdown(null);
+        return;
+      }
+
       if (now < start) {
-        // upcoming countdown -> to start
         const diff = start - now;
         const days = Math.floor(diff / (1000 * 60 * 60 * 24));
         const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
@@ -293,7 +369,6 @@ export default function AuctionDetailsDark() {
         if (mounted)
           setCountdown({ type: "starts_in", days, hours, minutes, seconds });
       } else if (now <= end) {
-        // live countdown -> to end
         const diff = end - now;
         const days = Math.floor(diff / (1000 * 60 * 60 * 24));
         const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
@@ -314,39 +389,42 @@ export default function AuctionDetailsDark() {
     };
   }, [auction]);
 
-  // ---------- place bid API ----------
+  // ------- place bid API -------
   const placeBid = async (amount) => {
     if (!user) throw new Error("Login required to place bids");
     if (!auction) throw new Error("Auction not loaded");
     const status = computeStatus(auction);
     if (status !== "live") throw new Error("Auction is not live");
 
+    // server will validate again — client does pre-checks in form
     try {
       await api.post(
         "/bids",
         { auctionId: id, amount },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      // server will emit the newBid event; optimistic update handled by socket listener
+      // optimistic update is handled via socket; if you want immediate UI update:
+      // const pseudoBid = { _id: `local-${Date.now()}`, amount, bidder: { name: user.name }, createdAt: new Date().toISOString() };
+      // setBids(prev=>[pseudoBid,...prev]);
     } catch (err) {
       const msg = err?.response?.data?.message || err?.message || "Bid failed";
       throw new Error(msg);
     }
   };
 
-  // ---------- UI helpers ----------
+  // ------- derived values -------
   const status = auction ? computeStatus(auction) : "loading";
   const minRequired = computeMinRequired(auction, bids);
   const winner = computeWinner(auction, bids);
 
-  // ---------- render ----------
+  // ------- UI -------
   if (loading)
     return <div className="p-6 text-yellow-200">Loading auction...</div>;
   if (!auction)
     return <div className="p-6 text-yellow-200">Auction not found</div>;
 
   return (
-    <div className="min-h-screen pt-28 p-6 bg-gradient-to-b from-black via-gray-900 to-[#070707] text-yellow-100">
+    <div className="min-h-screen pt-28 p-6 bg-linear-to-b from-black via-gray-900 to-[#070707] text-yellow-100">
       <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-6">
         {/* LEFT: Product + info */}
         <div className="md:col-span-2 bg-[#070707]/80 border border-yellow-900 p-6 rounded-xl shadow-lg">
@@ -460,7 +538,13 @@ export default function AuctionDetailsDark() {
                           {new Date(winner.createdAt).toLocaleString()}
                         </div>
                       </div>
-                      <div className="text-yellow-300 font-bold">
+                      <div
+                        className={
+                          auction.type === "reverse"
+                            ? "text-green-300 font-bold"
+                            : "text-yellow-300 font-bold"
+                        }
+                      >
                         ₹{winner.amount}
                       </div>
                     </div>
@@ -473,8 +557,6 @@ export default function AuctionDetailsDark() {
               )}
             </div>
           </div>
-
-          {/* LONG DESCRIPTION or other UI areas could go here */}
         </div>
 
         {/* RIGHT: Bid panel */}
@@ -482,16 +564,22 @@ export default function AuctionDetailsDark() {
           <div>
             <div className="text-sm text-yellow-100/80">Current Minimum</div>
             <div className="text-2xl font-bold text-yellow-300">
-              ₹{minRequired}
+              ₹{minRequired ?? "-"}
             </div>
             <div className="mt-3 text-xs text-yellow-100/60">
               Type: {auction.type}
             </div>
+            {auction.type === "reverse" && (
+              <div className="mt-1 text-green-300 text-xs">
+                🔻 Lowest bid wins this auction
+              </div>
+            )}
           </div>
 
           <div className="mt-6">
             <BidForm
               minRequired={minRequired}
+              type={auction.type}
               onSubmit={placeBid}
               disabled={status !== "live"}
             />

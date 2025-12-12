@@ -8,7 +8,7 @@ export default function NavBar() {
   const { user, logout } = useContext(AuthContext);
   const [open, setOpen] = useState(false);
 
-  const toggleMenu = () => setOpen(!open);
+  const toggleMenu = () => setOpen((prev) => !prev);
 
   return (
     <nav className="fixed top-0 left-0 w-full z-50 bg-white/10 backdrop-blur-xl border-b border-white/20 shadow-lg animate-fadeIn">
@@ -30,42 +30,35 @@ export default function NavBar() {
             </>
           )}
 
-          {user && (
+          {/* BUYER MENU */}
+          {user?.role === "buyer" && (
             <>
-              {user.role === "buyer" && (
-                <>
-                  <NavItem to="/buyer/auctions" label="Auctions" />
-                  <NavItem to="/buyer/profile" label="Profile" />
-                </>
-              )}
-
-              {user.role === "seller" && (
-                <>
-                  <NavItem
-                    to="/seller/dashboard"
-                    label="Dashboard"
-                    className="hover:underline"
-                  />
-                  <NavItem
-                    to="/seller/create-auction"
-                    label="Create Auction"
-                    className="hover:underline"
-                  />
-                  <NavItem
-                    to="/seller/auctions"
-                    label="Marketplace"
-                    className="hover:underline"
-                  />
-                </>
-              )}
-
-              <button
-                onClick={logout}
-                className="px-4 py-1 bg-red-500/70 rounded-lg hover:bg-red-600 transition"
-              >
-                Logout
-              </button>
+              <NavItem to="/buyer/auctions" label="Marketplace" />
+              <NavItem to="/buyer/profile" label="Profile" />
+              <NavItem to="/bids/history" label="Bid History" />
             </>
+          )}
+
+          {/* SELLER MENU */}
+          {user?.role === "seller" && (
+            <>
+              <NavItem to="/seller/dashboard" label="Dashboard" />
+              <NavItem to="/seller/create-auction" label="Create Auction" />
+
+              {/* FIXED: Marketplace must go to BUYER auctions */}
+              <NavItem to="/buyer/auctions" label="Marketplace" />
+
+              <NavItem to="/seller/auctions" label="My Auctions" />
+            </>
+          )}
+
+          {user && (
+            <button
+              onClick={logout}
+              className="px-4 py-2 bg-red-500/80 rounded-lg hover:bg-red-600 transition"
+            >
+              Logout
+            </button>
           )}
         </div>
 
@@ -78,7 +71,7 @@ export default function NavBar() {
         </button>
       </div>
 
-      {/* Mobile Slide-Down Menu */}
+      {/* Mobile Menu */}
       {open && (
         <div className="md:hidden bg-white/10 backdrop-blur-xl border-t border-white/20 px-6 py-4 animate-fadeInDown">
           <div className="flex flex-col gap-4 text-white text-lg">
@@ -89,53 +82,66 @@ export default function NavBar() {
               </>
             )}
 
-            {user && (
+            {/* BUYER MOBILE MENU */}
+            {user?.role === "buyer" && (
               <>
-                {user.role === "buyer" && (
-                  <>
-                    <NavItem
-                      to="/buyer/auctions"
-                      label="Auctions"
-                      onClick={toggleMenu}
-                    />
-                    <NavItem
-                      to="/buyer/profile"
-                      label="Profile"
-                      onClick={toggleMenu}
-                    />
-                  </>
-                )}
-
-                {user.role === "seller" && (
-                  <>
-                    <NavItem
-                      to="/seller/dashboard"
-                      label="Dashboard"
-                      onClick={toggleMenu}
-                    />
-                    <NavItem
-                      to="/seller/create-auction"
-                      label="Create Auction"
-                      onClick={toggleMenu}
-                    />
-                    <NavItem
-                      to="/seller/auctions"
-                      label="Marketplace"
-                      onClick={toggleMenu}
-                    />
-                  </>
-                )}
-
-                <button
-                  onClick={() => {
-                    toggleMenu();
-                    logout();
-                  }}
-                  className="px-4 py-2 bg-red-500/70 rounded-lg hover:bg-red-600 transition text-left"
-                >
-                  Logout
-                </button>
+                <NavItem
+                  to="/buyer/auctions"
+                  label="Marketplace"
+                  onClick={toggleMenu}
+                />
+                <NavItem
+                  to="/buyer/profile"
+                  label="Profile"
+                  onClick={toggleMenu}
+                />
+                <NavItem
+                  to="/bids/history"
+                  label="Bid History"
+                  onClick={toggleMenu}
+                />
               </>
+            )}
+
+            {/* SELLER MOBILE MENU */}
+            {user?.role === "seller" && (
+              <>
+                <NavItem
+                  to="/seller/dashboard"
+                  label="Dashboard"
+                  onClick={toggleMenu}
+                />
+                <NavItem
+                  to="/seller/create-auction"
+                  label="Create Auction"
+                  onClick={toggleMenu}
+                />
+
+                {/* FIXED: Marketplace → buyer auctions */}
+                <NavItem
+                  to="/buyer/auctions"
+                  label="Marketplace"
+                  onClick={toggleMenu}
+                />
+
+                <NavItem
+                  to="/seller/auctions"
+                  label="My Auctions"
+                  onClick={toggleMenu}
+                />
+              </>
+            )}
+
+            {user && (
+              <button
+                onClick={() => {
+                  toggleMenu();
+                  logout();
+                }}
+                className="px-4 py-2 bg-red-500/70 rounded-lg hover:bg-red-600 transition text-left"
+              >
+                Logout
+              </button>
             )}
           </div>
         </div>
@@ -144,7 +150,7 @@ export default function NavBar() {
   );
 }
 
-/* Reusable NavItem Component */
+/* Reusable Navigation Item */
 function NavItem({ to, label, onClick }) {
   return (
     <Link
@@ -153,7 +159,6 @@ function NavItem({ to, label, onClick }) {
       className="relative group hover:opacity-90 transition"
     >
       {label}
-      {/* Animated Underline */}
       <span className="absolute left-0 -bottom-1 w-0 group-hover:w-full h-0.5 bg-white transition-all duration-300"></span>
     </Link>
   );

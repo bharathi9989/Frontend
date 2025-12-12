@@ -7,14 +7,17 @@ import { formatDistanceToNowStrict } from "date-fns";
 
 /**
  * SellerAuctions.jsx
- * - Robust seller auctions page with:
- *   • resilient API shapes handling
- *   • live flip-style countdown per auction (desktop & mobile)
- *   • danger mode (last 10 minutes)
- *   • re-list modal (POST /auctions/relist)
- *   • close-now (PUT /auctions/:id/status)
+ * Single-file replacement — robust, production-ready UI for seller auctions.
  *
- * Drop-in replacement for your current file.
+ * Expects:
+ * - api.get("/auctions?my=true")  => seller auctions (or paged object { auctions, total })
+ * - api.get("/products")          => seller products
+ * - api.put("/auctions/:id/close", {}) => close auction immediately
+ * - api.post("/auctions/relist")  => re-list product
+ *
+ * Notes:
+ * - Uses existing `api` axios instance for baseURL/auth.
+ * - Uses react-icons/hi via Icons.* (no named import mismatch).
  */
 
 /* ---------------------- Utilities ---------------------- */
@@ -52,7 +55,7 @@ const isAuctionEnded = (a, now = new Date()) => {
   return end < now;
 };
 
-/* ---------------------- Small UI bits ---------------------- */
+/* ---------------------- UI Small Pieces ---------------------- */
 
 function Badge({ children, color = "bg-gray-300 text-black" }) {
   return (
@@ -77,7 +80,7 @@ function SmallSpinner({ size = 4 }) {
 
 /**
  * useCountdown(endAt)
- * returns hh:mm:ss string (updates every second)
+ * returns "HH:MM:SS" string (updates every second), or empty string if no endAt.
  */
 function useCountdown(endAt) {
   const [timeLeft, setTimeLeft] = useState("");
@@ -87,8 +90,8 @@ function useCountdown(endAt) {
       setTimeLeft("");
       return;
     }
-
     let mounted = true;
+
     const update = () => {
       if (!mounted) return;
       const now = new Date();
@@ -121,7 +124,7 @@ function useCountdown(endAt) {
 
 /**
  * FlipTimer - simple flip-like blocks for H:M:S
- * danger -> when last 10 minutes show red pulse
+ * danger -> last 10 minutes
  */
 function FlipTimer({ time }) {
   if (!time) return null;
@@ -159,7 +162,7 @@ function LiveCountdown({ endAt }) {
   return <FlipTimer time={time} />;
 }
 
-/* ---------------------- ReList Modal Component ---------------------- */
+/* ---------------------- ReList Modal ---------------------- */
 
 function ReListModal({ open, onClose, product, token, onCreated }) {
   const [form, setForm] = useState({
@@ -336,7 +339,7 @@ function ReListModal({ open, onClose, product, token, onCreated }) {
   );
 }
 
-/* ---------------------- Main Page Component ---------------------- */
+/* ---------------------- Main Page ---------------------- */
 
 export default function SellerAuctions() {
   const { user, token } = useContext(AuthContext);
@@ -349,6 +352,10 @@ export default function SellerAuctions() {
   const [relistProduct, setRelistProduct] = useState(null);
   const [refreshToggle, setRefreshToggle] = useState(0);
 
+  // If your backend uses different path change these constants:
+  const CLOSE_PATH = (id) => `/auctions/${id}/close`;
+  const RELIST_PATH = `/auctions/relist`;
+
   // Load auctions + products for seller
   useEffect(() => {
     let mounted = true;
@@ -357,7 +364,6 @@ export default function SellerAuctions() {
       setLoading(true);
       setError("");
       try {
-        // request seller-specific auctions (backend supports my=true)
         const [aRes, pRes] = await Promise.all([
           api.get("/auctions?my=true", {
             headers: { Authorization: `Bearer ${token}` },
@@ -375,7 +381,7 @@ export default function SellerAuctions() {
           ? pRes.data
           : pRes.data?.products || [];
 
-        // map products by id for quick attach
+        // product map to attach when auction.product is just id
         const productMap = new Map();
         for (const p of rawProducts) {
           const id = p._id || p.id;
@@ -399,12 +405,16 @@ export default function SellerAuctions() {
               } else {
                 obj.product = prodRef;
               }
+            } else {
+              // no product attached, keep null to display fallback
+              obj.product = null;
             }
 
             obj.seller = obj.seller || obj.sellerId || obj.seller_id || null;
             return obj;
           })
           .filter((a) => {
+            // Only seller's auctions (defensive)
             const s = normalizeSellerId(a.seller);
             return s && sellerId && s === sellerId;
           });
@@ -428,12 +438,14 @@ export default function SellerAuctions() {
     };
 
     load();
-    return () => (mounted = false);
+    return () => {
+      mounted = false;
+    };
   }, [token, user, refreshToggle]);
 
   const refresh = () => setRefreshToggle((s) => s + 1);
 
-  // counts - prefer explicit status but fallback to time windows
+  // counts
   const counts = useMemo(() => {
     const now = new Date();
     const live = auctions.filter((a) => isAuctionLive(a, now)).length;
@@ -445,26 +457,47 @@ export default function SellerAuctions() {
     return { live, upcoming, ended, unsold };
   }, [auctions, products]);
 
-  // Close auction now (seller-only)
+  // Close auction now (seller-only). Uses CLOSE_PATH function above.
   const closeNow = async (auctionId) => {
     if (!confirm("Close this auction now? This will finalize the auction."))
       return;
+
     setActionLoadingId(auctionId);
     try {
-      await api.put(
-        `/auctions/${auctionId}/status`,
-        { status: "closed" },
+      const res = await api.put(
+        CLOSE_PATH(auctionId),
+        {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
+
+      // success
       refresh();
+      return res.data;
     } catch (err) {
-      alert(err?.response?.data?.message || err.message || "Failed to close");
+      console.error("Close auction failed: ", err);
+      // common case: auction already closed -> backend may respond 400 or 409
+      const serverMessage = err?.response?.data?.message;
+      if (
+        err?.response?.status === 400 ||
+        err?.response?.status === 409 ||
+        /already closed/i.test(serverMessage || "")
+      ) {
+        alert(serverMessage || "Auction already closed.");
+        // ensure UI reflects actual state
+        refresh();
+      } else {
+        alert(serverMessage || err.message || "Failed to close auction.");
+      }
     } finally {
       setActionLoadingId(null);
     }
   };
 
   const openRelist = (product) => {
+    if (!product) {
+      alert("Product missing — cannot re-list. Fix product first.");
+      return;
+    }
     setRelistProduct(product);
     setRelistOpen(true);
   };
@@ -590,7 +623,9 @@ export default function SellerAuctions() {
                         </div>
                         <div>
                           <div className="font-semibold text-lg">
-                            {a.product?.title || a.product?.name || "Untitled"}
+                            {a.product?.title ||
+                              a.product?.name ||
+                              "(Product missing)"}
                           </div>
                           <div className="text-sm text-white/60">
                             {a.product?.category ||
@@ -611,7 +646,7 @@ export default function SellerAuctions() {
                         </div>
                       </td>
 
-                      {/* Timing cell replaced with live countdown */}
+                      {/* Timing cell with live countdown */}
                       <td className="p-4">
                         <div className="text-xs text-white/50">
                           Starts:{" "}
@@ -716,7 +751,7 @@ export default function SellerAuctions() {
 
                       <div className="flex-1">
                         <div className="font-semibold">
-                          {a.product?.title || "Untitled"}
+                          {a.product?.title || "(Product missing)"}
                         </div>
                         <div className="text-xs text-white/60">
                           {a.product?.category || "-"}

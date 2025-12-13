@@ -9,6 +9,45 @@ export default function BidForm({ onSubmit, minRequired, disabled, type }) {
     e.preventDefault();
     setError("");
 
+    const handle = async (e) => {
+      e.preventDefault();
+      setError("");
+
+      if (disabled) return;
+
+      const amount = Number(val);
+      if (!amount || amount <= 0) {
+        setError("Enter a valid bid amount");
+        return;
+      }
+
+      if (type === "reverse") {
+        if (amount > minRequired) {
+          setError(`Reverse auction: bid must be ≤ ₹${minRequired}`);
+          return;
+        }
+      } else {
+        if (amount < minRequired) {
+          setError(`Minimum bid is ₹${minRequired}`);
+          return;
+        }
+      }
+
+      setBusy(true);
+      try {
+        await onSubmit(amount);
+        setVal("");
+      } catch (err) {
+        setError(
+          err?.response?.data?.message ||
+            err?.message ||
+            "Bid failed. Try again."
+        );
+      } finally {
+        setBusy(false);
+      }
+    };
+
     const num = Number(amount);
     if (!num || isNaN(num)) return setError("Enter a valid number");
     // For reverse auction amount must be lower; for traditional must be >= minRequired
@@ -55,5 +94,7 @@ export default function BidForm({ onSubmit, minRequired, disabled, type }) {
         </button>
       </div>
     </form>
+
+    
   );
 }

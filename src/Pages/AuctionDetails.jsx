@@ -1,4 +1,3 @@
-// src/pages/AuctionDetails.jsx
 import React, {
   useEffect,
   useState,
@@ -12,31 +11,67 @@ import { AuthContext } from "../context/AuthContext";
 import { initSocket, getSocket } from "../utils/socket";
 
 /* ============================================================
-   Small Spinner
+   Helpers
 ============================================================ */
-const SmallSpinner = () => (
-  <div className="w-6 h-6 border-2 border-yellow-500/40 border-t-yellow-300 rounded-full animate-spin" />
-);
+const computeStatus = (a) => {
+  if (!a) return "loading";
+  if (a.status === "closed") return "closed";
+  const now = Date.now();
+  const start = new Date(a.startAt).getTime();
+  const end = new Date(a.endAt).getTime();
+  if (now < start) return "upcoming";
+  if (now > end) return "ended";
+  return "live";
+};
+
+const computeMinRequired = (a, bids) => {
+  if (!a) return 0;
+  const inc = Number(a.minIncrement || 1);
+  if (!bids || bids.length === 0) return Number(a.startPrice || 0);
+
+  if (a.type === "reverse") {
+    const lowest = Math.min(...bids.map((b) => Number(b.amount)));
+    return Math.max(0, lowest - inc);
+  } else {
+    const highest = Math.max(...bids.map((b) => Number(b.amount)));
+    return highest + inc;
+  }
+};
+
+const computeWinner = (a, bids) => {
+  if (!a || !bids || bids.length === 0) return null;
+  return a.type === "reverse"
+    ? bids.reduce((acc, b) => (b.amount < acc.amount ? b : acc), bids[0])
+    : bids.reduce((acc, b) => (b.amount > acc.amount ? b : acc), bids[0]);
+};
 
 /* ============================================================
-   BidForm Component
+   BidForm
 ============================================================ */
 function BidForm({ minRequired, type, disabled, onSubmit }) {
   const [val, setVal] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [optimisticBidId, setOptimisticBidId] = useState(null);
 
-  const handle = async (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-    if (disabled) return alert("Auction not live");
-    const amount = Number(val);
-    if (!amount || amount <= 0) return alert("Enter valid amount");
+    setError("");
 
-    if (type === "reverse") {
-      if (amount > minRequired)
-        return alert(`Reverse auction: Must bid ≤ ₹${minRequired}`);
-    } else {
-      if (amount < minRequired)
-        return alert(`Minimum required is ₹${minRequired}`);
+    const amount = Number(val);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError("Enter a valid amount");
+      return;
+    }
+
+    if (type === "reverse" && amount > minRequired) {
+      setError(`Reverse auction: bid ≤ ₹${minRequired}`);
+      return;
+    }
+
+    if (type !== "reverse" && amount < minRequired) {
+      setError(`Minimum required ₹${minRequired}`);
+      return;
     }
 
     setBusy(true);
@@ -44,39 +79,60 @@ function BidForm({ minRequired, type, disabled, onSubmit }) {
       await onSubmit(amount);
       setVal("");
     } catch (err) {
-      alert(err.message);
+      setError(err.message || "Bid failed");
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   };
 
   return (
-    <form onSubmit={handle} className="flex gap-3">
-      <input
-        type="number"
-        value={val}
-        onChange={(e) => setVal(e.target.value)}
-        className="flex-1 p-3 bg-black border border-yellow-900 rounded text-white"
-        placeholder={
-          type === "reverse" ? `Bid ≤ ${minRequired}` : `Min ₹${minRequired}`
-        }
-        disabled={disabled || busy}
-      />
-      <button
-        disabled={disabled || busy}
-        className="px-4 py-2 bg-yellow-500 text-black rounded font-semibold"
-      >
-        {busy ? "..." : "Bid"}
-      </button>
+    <form onSubmit={submit} className="space-y-2">
+      <div className="flex gap-3">
+        <input
+          type="number"
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          disabled={disabled || busy}
+          placeholder={
+            type === "reverse" ? `Bid ≤ ₹${minRequired}` : `Min ₹${minRequired}`
+          }
+          className={`flex-1 p-3 rounded bg-black text-white border ${
+            disabled
+              ? "opacity-50 cursor-not-allowed border-gray-700"
+              : "border-yellow-900"
+          }`}
+        />
+        <button
+          disabled={disabled || busy}
+          className={`px-4 py-2 rounded font-semibold ${
+            disabled
+              ? "bg-gray-600 cursor-not-allowed"
+              : "bg-yellow-500 text-black"
+          }`}
+        >
+          {busy ? "..." : "Bid"}
+        </button>
+      </div>
+
+      {error && <div className="text-xs text-red-400">{error}</div>}
     </form>
   );
 }
 
 /* ============================================================
-   BidList Component
+   BidList
 ============================================================ */
 function BidList({ bids, type }) {
-  if (!bids || bids.length === 0)
-    return <div className="text-yellow-200/40">No bids yet</div>;
+  if (!bids.length)
+    return <>
+      <div
+  className={`flex justify-between p-3 rounded border ${
+    b.optimistic
+      ? "bg-yellow-900/40 border-yellow-500 animate-pulse"
+      : "bg-black/40 border-yellow-900"
+  }`}
+></div>
+    </>
 
   const sorted =
     type === "reverse"
@@ -91,15 +147,14 @@ function BidList({ bids, type }) {
           className="flex justify-between p-3 bg-black/40 border border-yellow-900 rounded"
         >
           <div>
-            <div className="text-yellow-200 font-semibold">
+            <div className="font-semibold text-yellow-200">
               {b.bidder?.name || b.bidder?.email || "Anonymous"}
             </div>
             <div className="text-xs text-yellow-100/60">
               {new Date(b.createdAt).toLocaleString()}
             </div>
           </div>
-
-          <div className="text-yellow-300 font-bold">₹{b.amount}</div>
+          <div className="font-bold text-yellow-300">₹{b.amount}</div>
         </div>
       ))}
     </div>
@@ -107,41 +162,7 @@ function BidList({ bids, type }) {
 }
 
 /* ============================================================
-   Utility
-============================================================ */
-const computeStatus = (a) => {
-  const now = Date.now();
-  const start = new Date(a.startAt).getTime();
-  const end = new Date(a.endAt).getTime();
-  if (a.status === "closed") return "closed";
-  if (now < start) return "upcoming";
-  if (now > end) return "ended";
-  return "live";
-};
-
-const computeMinRequired = (a, bids) => {
-  if (!a) return 0;
-  const inc = Number(a.minIncrement || 1);
-  if (!bids || bids.length === 0) return Number(a.startPrice);
-
-  if (a.type === "reverse") {
-    const lowest = Math.min(...bids.map((b) => b.amount));
-    return Math.max(0, lowest - inc);
-  }
-
-  const highest = Math.max(...bids.map((b) => b.amount));
-  return highest + inc;
-};
-
-const computeWinner = (a, bids) => {
-  if (!a || !bids || bids.length === 0) return null;
-  return a.type === "reverse"
-    ? bids.reduce((acc, b) => (b.amount < acc.amount ? b : acc), bids[0])
-    : bids.reduce((acc, b) => (b.amount > acc.amount ? b : acc), bids[0]);
-};
-
-/* ============================================================
-   Main Component
+   MAIN
 ============================================================ */
 export default function AuctionDetails() {
   const { id } = useParams();
@@ -152,30 +173,24 @@ export default function AuctionDetails() {
   const [bids, setBids] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  /* ---------------------------
-     Load Auction + Bids
-  ---------------------------- */
+  /* -------- Load -------- */
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const res = await api.get(`/auctions/${id}`);
-      const a = res.data.auction;
-      setAuction(a);
-      setProduct(a.product || null);
+      setAuction(res.data.auction);
+      setProduct(res.data.auction.product);
       setBids(res.data.bids || []);
-    } catch (err) {
-      setAuction(null);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [id]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  /* ---------------------------
-     Socket Setup
-  ---------------------------- */
+  /* -------- Socket -------- */
   useEffect(() => {
     initSocket();
     const socket = getSocket();
@@ -199,9 +214,7 @@ export default function AuctionDetails() {
 
     socket.on("auctionClosed", (p) => {
       if (p.auctionId !== id) return;
-      setAuction((old) =>
-        old ? { ...old, status: "closed", winnerBid: p.winner } : old
-      );
+      setAuction((a) => ({ ...a, status: "closed" }));
     });
 
     return () => {
@@ -211,129 +224,88 @@ export default function AuctionDetails() {
     };
   }, [id]);
 
-  /* ---------------------------
-     Place Bid
-  ---------------------------- */
-  const handleBid = async (amount) => {
+  /* -------- Place Bid -------- */
+  const placeBid = async (amount) => {
     if (!user) throw new Error("Login required");
-    await api.post(
-      "/bids",
-      { auctionId: id, amount },
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
+
+    const tempId = `optimistic-${Date.now()}`;
+    setOptimisticBidId(tempId);
+
+    // 1️⃣ Optimistic UI update
+    setBids((prev) => [
+      {
+        _id: tempId,
+        amount,
+        bidder: { name: user.name },
+        createdAt: new Date(),
+        optimistic: true,
+      },
+      ...prev,
+    ]);
+
+    try {
+      // 2️⃣ Real API call
+      await api.post(
+        "/bids",
+        { auctionId: id, amount },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      // 3️⃣ Re-fetch authoritative data
+      await load(); // <-- THIS IS KEY
+      setOptimisticBidId(null);
+    } catch (err) {
+      // 4️⃣ Rollback optimistic bid
+      setBids((prev) => prev.filter((b) => b._id !== tempId));
+      setOptimisticBidId(null);
+
+      throw new Error(
+        err?.response?.data?.message || "Bid rejected (price already updated)"
+      );
+    }
   };
 
-  /* ---------------------------
-     Derived Values
-  ---------------------------- */
-  const status = auction ? computeStatus(auction) : "loading";
-  const minRequired = computeMinRequired(auction, bids);
-  const winner = computeWinner(auction, bids);
+  if (loading) return <div className="p-6 text-yellow-200">Loading…</div>;
+  if (!auction) return <div className="p-6">Auction not found</div>;
 
-  /* ---------------------------
-     UI
-  ---------------------------- */
-  if (loading) return <div className="p-6 text-yellow-200">Loading...</div>;
-  if (!auction)
-    return <div className="p-6 text-yellow-200">Auction not found</div>;
+  const status = computeStatus(auction);
+  const isLive = status === "live";
+  const confirmedBids = bids.filter((b) => !b.optimistic);
+  const minRequired = computeMinRequired(auction, confirmedBids);
+  const winner = computeWinner(auction, bids);
 
   return (
     <div className="min-h-screen pt-28 p-6 bg-black text-yellow-100">
       <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-6">
-        {/* LEFT SIDE */}
+        {/* LEFT */}
         <div className="md:col-span-2 bg-[#0b0b0b]/80 p-6 border border-yellow-900 rounded-xl">
-          <div className="flex gap-6">
-            <div className="w-2/5 h-60 bg-black rounded overflow-hidden flex items-center justify-center">
-              {product?.images?.[0] ? (
-                <img
-                  src={product.images[0]}
-                  alt=""
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="text-yellow-300/40">No Image</div>
-              )}
+          <h1 className="text-2xl font-bold">{product?.title}</h1>
+          <p className="mt-2 text-yellow-100/70">{product?.description}</p>
+
+          <div className="grid grid-cols-2 gap-3 mt-4 text-sm">
+            <div>
+              Status: <b>{status}</b>
             </div>
-
-            <div className="flex-1">
-              <h1 className="text-2xl font-bold">{product?.title}</h1>
-              <p className="mt-2 text-yellow-100/70">
-                {product?.description || "No description"}
-              </p>
-
-              <div className="grid grid-cols-2 gap-3 mt-4 text-sm">
-                <div>
-                  <div className="text-yellow-100/70">Type</div>
-                  <div className="font-semibold">{auction.type}</div>
-                </div>
-                <div>
-                  <div className="text-yellow-100/70">Status</div>
-                  <div
-                    className={`font-semibold ${
-                      status === "live"
-                        ? "text-green-300"
-                        : status === "upcoming"
-                        ? "text-yellow-300"
-                        : "text-red-400"
-                    }`}
-                  >
-                    {status}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-yellow-100/70">Start Price</div>
-                  <div className="font-semibold">₹{auction.startPrice}</div>
-                </div>
-                <div>
-                  <div className="text-yellow-100/70">Min Increment</div>
-                  <div className="font-semibold">₹{auction.minIncrement}</div>
-                </div>
-                <div>
-                  <div className="text-yellow-100/70">Start At</div>
-                  <div className="font-semibold">
-                    {new Date(auction.startAt).toLocaleString()}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-yellow-100/70">End At</div>
-                  <div className="font-semibold">
-                    {new Date(auction.endAt).toLocaleString()}
-                  </div>
-                </div>
-              </div>
-
-              {/* Winner */}
-              {(status === "closed" || status === "ended") && (
-                <div className="mt-6 p-4 bg-black/40 border border-yellow-900 rounded">
-                  <div className="text-yellow-100/70">Winner</div>
-                  {winner ? (
-                    <div className="flex justify-between mt-2">
-                      <div>
-                        <div className="font-semibold text-yellow-200">
-                          {winner.bidder?.name || winner.bidder?.email}
-                        </div>
-                        <div className="text-xs text-yellow-100/60">
-                          {new Date(winner.createdAt).toLocaleString()}
-                        </div>
-                      </div>
-                      <div className="text-yellow-300 font-bold">
-                        ₹{winner.amount}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-yellow-200/40 mt-2">
-                      No bids placed
-                    </div>
-                  )}
-                </div>
-              )}
+            <div>
+              Type: <b>{auction.type}</b>
             </div>
+            <div>Start: {new Date(auction.startAt).toLocaleString()}</div>
+            <div>End: {new Date(auction.endAt).toLocaleString()}</div>
           </div>
+
+          {(status === "closed" || status === "ended") && (
+            <div className="mt-4 p-4 border border-yellow-900 rounded">
+              Winner:{" "}
+              {winner
+                ? `${winner.bidder?.name} – ₹${winner.amount}`
+                : "No bids"}
+            </div>
+          )}
         </div>
 
-        {/* RIGHT SIDE */}
+        {/* RIGHT */}
         <aside className="bg-[#0b0b0b]/70 p-6 border border-yellow-900 rounded-xl">
-          <div className="text-sm text-yellow-100/70">Minimum Required</div>
+          <div className="text-sm">Minimum Required</div>
           <div className="text-3xl font-bold text-yellow-300">
             ₹{minRequired}
           </div>
@@ -342,17 +314,19 @@ export default function AuctionDetails() {
             <BidForm
               minRequired={minRequired}
               type={auction.type}
-              disabled={status !== "live"}
-              onSubmit={handleBid}
+              disabled={!isLive}
+              onSubmit={placeBid}
             />
+            {!isLive && (
+              <div className="mt-2 text-xs text-yellow-200/60">
+                {status === "upcoming" && "Auction not started yet"}
+                {(status === "ended" || status === "closed") && "Auction ended"}
+              </div>
+            )}
           </div>
 
-          <h3 className="mt-6 mb-3 font-semibold text-yellow-200">
-            Bid History
-          </h3>
-          <div className="max-h-80 overflow-y-auto">
-            <BidList bids={bids} type={auction.type} />
-          </div>
+          <h3 className="mt-6 font-semibold">Bid History</h3>
+          <BidList bids={bids} type={auction.type} />
         </aside>
       </div>
     </div>

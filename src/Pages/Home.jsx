@@ -6,7 +6,7 @@ import { useContext } from "react";
 import { AuthContext } from "../context/AuthContext";
 
 // Magnetic Button Effect
-const useMagnetic = () => {
+export const useMagnetic = () => {
   useEffect(() => {
     
     const buttons = document.querySelectorAll(".magnetic-btn");
@@ -97,32 +97,33 @@ export default function Home() {
 
         {/* CTA BUTTONS */}
         <div className="flex gap-6 mt-10">
-  <Link
-    to="/buyer/auctions"
-    className="liquid-btn magnetic-btn px-8 py-3 bg-yellow-400 text-black font-bold rounded-xl shadow-xl hover:bg-yellow-300 transition"
-  >
-    🔥 Explore Auctions
-  </Link>
+          <Link
+            to="/buyer/auctions"
+            className="liquid-btn magnetic-btn px-8 py-3 bg-red-400 text-black font-bold rounded-xl shadow-xl hover:bg-blue-400 transition"
+          >
+            🔥 Explore Auctions
+          </Link>
 
-  {!user && (
-    <Link
-      to="/register"
-      className="liquid-btn magnetic-btn px-8 py-3 bg-white/10 border border-white/20 rounded-xl text-white hover:bg-white/20 transition"
-    >
-      Create Account
-    </Link>
-  )}
+          {!user && (
+            <Link
+              to="/register"
+              className="liquid-btn magnetic-btn px-8 py-3 bg-white/10 border border-white/20 rounded-xl text-white hover:bg-white/20 transition"
+            >
+              Create Account
+            </Link>
+          )}
 
-  {user && (
-    <Link
-      to={user.role === "seller" ? "/seller/dashboard" : "/buyer/profile"}
-      className="liquid-btn magnetic-btn px-8 py-3 bg-white/10 border border-white/20 rounded-xl text-white hover:bg-white/20 transition"
-    >
-      Go to Dashboard
-    </Link>
-  )}
-</div>
-
+          {user && (
+            <Link
+              to={
+                user.role === "seller" ? "/seller/dashboard" : "/buyer/profile"
+              }
+              className="liquid-btn magnetic-btn px-8 py-3 bg-white/10 border border-white/20 rounded-xl text-white hover:bg-white/20 transition"
+            >
+              Go to Dashboard
+            </Link>
+          )}
+        </div>
       </section>
 
       {/* ========================== FEATURES SECTION ========================== */}
@@ -233,6 +234,7 @@ export default function Home() {
         }}
       >
         Elevate Your Auction Experience 🚀
+        
       </section>
     </div>
   );

@@ -4,6 +4,7 @@ import { AuthContext } from "../context/AuthContext";
 import api from "../api/axios";
 import * as Icons from "react-icons/hi";
 import { formatDistanceToNowStrict } from "date-fns";
+import { useMagnetic } from "./Home";
 
 /* ============================================================
    UTILS
@@ -129,6 +130,8 @@ function ReListModal({ open, onClose, product, token, onDone }) {
       setSaving(false);
     }
   };
+
+  useMagnetic()
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">

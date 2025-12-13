@@ -2,10 +2,13 @@ import React, { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { HiLightningBolt, HiCash, HiClock, HiTrendingUp } from "react-icons/hi";
 import FeaturedAuctions from "../components/FeaturedAuctions";
+import { useContext } from "react";
+import { AuthContext } from "../context/AuthContext";
 
 // Magnetic Button Effect
 const useMagnetic = () => {
   useEffect(() => {
+    
     const buttons = document.querySelectorAll(".magnetic-btn");
 
     const activateMagnet = (e, btn) => {
@@ -36,6 +39,7 @@ const useMagnetic = () => {
 
 export default function Home() {
   useMagnetic();
+  const { user } = useContext(AuthContext);
 
   return (
     <div className="min-h-screen bg-[#0F1117] text-white overflow-hidden">
@@ -93,20 +97,32 @@ export default function Home() {
 
         {/* CTA BUTTONS */}
         <div className="flex gap-6 mt-10">
-          <Link
-            to="/buyer/auctions"
-            className="liquid-btn magnetic-btn px-8 py-3 bg-yellow-400 text-black font-bold rounded-xl shadow-xl hover:bg-yellow-300 transition"
-          >
-            🔥 Explore Auctions
-          </Link>
+  <Link
+    to="/buyer/auctions"
+    className="liquid-btn magnetic-btn px-8 py-3 bg-yellow-400 text-black font-bold rounded-xl shadow-xl hover:bg-yellow-300 transition"
+  >
+    🔥 Explore Auctions
+  </Link>
 
-          <Link
-            to="/register"
-            className="liquid-btn magnetic-btn px-8 py-3 bg-white/10 border border-white/20 rounded-xl text-white hover:bg-white/20 transition"
-          >
-            Create Account
-          </Link>
-        </div>
+  {!user && (
+    <Link
+      to="/register"
+      className="liquid-btn magnetic-btn px-8 py-3 bg-white/10 border border-white/20 rounded-xl text-white hover:bg-white/20 transition"
+    >
+      Create Account
+    </Link>
+  )}
+
+  {user && (
+    <Link
+      to={user.role === "seller" ? "/seller/dashboard" : "/buyer/profile"}
+      className="liquid-btn magnetic-btn px-8 py-3 bg-white/10 border border-white/20 rounded-xl text-white hover:bg-white/20 transition"
+    >
+      Go to Dashboard
+    </Link>
+  )}
+</div>
+
       </section>
 
       {/* ========================== FEATURES SECTION ========================== */}

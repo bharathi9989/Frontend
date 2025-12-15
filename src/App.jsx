@@ -1,15 +1,15 @@
 import React from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 
-import NavBar from "./components/NavBar";
+import NavBar from "./components/NavBar.jsx";
 
 // PUBLIC PAGES
-import Home from "./Pages/Home";
-import Login from "./Pages/Login";
-import Register from "./Pages/Register";
+import Home from "./Pages/Home.jsx";
+import Login from "./Pages/Login.jsx";
+import Register from "./Pages/Register.jsx";
 
 // SELLER PROTECTED ROUTES
-import ProductedRoutes from "./components/ProductedRoutes";
+import ProductedRoutes from "./components/ProductedRoutes.jsx";
 import SellerDashboard from "./Pages/SellerDashBoard.jsx";
 import CreateAuction from "./Pages/CreateAuction.jsx";
 import SellerAuctions from "./Pages/SellerAuctions.jsx";

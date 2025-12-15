@@ -1,7 +1,7 @@
 // src/pages/BidHistory.jsx
 import React from "react";
 import BidRow from "../components/BidRow";
-import useBids from "../hooks/UseBids";
+import {useBids} from "../hooks/UseBids";
 
 export default function BidHistory() {
   const { bids, loading, error, pageInfo, reload } = useBids({

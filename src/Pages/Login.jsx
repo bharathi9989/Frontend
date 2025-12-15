@@ -39,21 +39,22 @@ function Login() {
   useMagnetic();
   return (
     <>
+      {[...Array(18)].map((_, i) => (
+        <div
+          key={i}
+          className="particle"
+          style={{
+            top: `${Math.random() * 100}%`,
+            left: `${Math.random() * 100}%`,
+            animationDelay: `${Math.random() * 3}s`,
+          }}
+        />
+      ))}
       <div className="min-h-screen bg-black via-gray-500 to-white/15 flex items-center justify-center p-6 ">
         <div className="w-full max-w-md max-h-max bg-white/10 backdrop-blur-xl border border-white/20 shadow-2xl rounded-3xl p-8 animate-fadeIn">
           <div className="neon-streak" style={{ top: "20%" }} />
           {/* ✨ PARTICLES */}
-          {[...Array(18)].map((_, i) => (
-            <div
-              key={i}
-              className="particle"
-              style={{
-                top: `${Math.random() * 100}%`,
-                left: `${Math.random() * 100}%`,
-                animationDelay: `${Math.random() * 3}s`,
-              }}
-            />
-          ))}
+
           <div
             className="neon-streak"
             style={{ top: "50%", animationDelay: "1s" }}

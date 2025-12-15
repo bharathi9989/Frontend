@@ -17,14 +17,13 @@ import SellerAuctions from "./Pages/SellerAuctions.jsx";
 // PRODUCT MANAGEMENT (Seller)
 import MyProducts from "./Pages/MyProducts.jsx";
 import EditProduct from "./Pages/EditeProducts.jsx";
+import CreateProduct from "./Pages/CreateProduct.jsx";
 
 // BUYER ROUTES
 import AuctionList from "./Pages/AuctionList.jsx";
 import AuctionDetails from "./Pages/AuctionDetails.jsx";
 import BuyerProfile from "./Pages/BuyerProfile.jsx";
 import BidHistory from "./Pages/BidHistory.jsx";
-import CreateProduct from "./Pages/createProduct.jsx";
-import ProductedRoutes from "./components/ProductedRoutes";
 
 function App() {
   return (
@@ -83,7 +82,6 @@ function App() {
             </ProductedRoutes>
           }
         />
-        
 
         <Route
           path="/seller/edit-product/:id"

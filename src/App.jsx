@@ -9,7 +9,7 @@ import Login from "./Pages/Login";
 import Register from "./Pages/Register";
 
 // SELLER PROTECTED ROUTES
-import ProductedRoute from "./components/ProductedRoutes";
+import ProductedRoutes from "./components/ProductedRoutes";
 import SellerDashboard from "./Pages/SellerDashBoard.jsx";
 import CreateAuction from "./Pages/CreateAuction.jsx";
 import SellerAuctions from "./Pages/SellerAuctions.jsx";
@@ -24,6 +24,7 @@ import AuctionDetails from "./Pages/AuctionDetails.jsx";
 import BuyerProfile from "./Pages/BuyerProfile.jsx";
 import BidHistory from "./Pages/BidHistory.jsx";
 import CreateProduct from "./Pages/createProduct.jsx";
+import ProductedRoutes from "./components/ProductedRoutes";
 
 function App() {
   return (
@@ -40,27 +41,27 @@ function App() {
         <Route
           path="/seller/dashboard"
           element={
-            <ProductedRoute roles={["seller"]}>
+            <ProductedRoutes roles={["seller"]}>
               <SellerDashboard />
-            </ProductedRoute>
+            </ProductedRoutes>
           }
         />
 
         <Route
           path="/seller/create-auction"
           element={
-            <ProductedRoute roles={["seller"]}>
+            <ProductedRoutes roles={["seller"]}>
               <CreateAuction />
-            </ProductedRoute>
+            </ProductedRoutes>
           }
         />
 
         <Route
           path="/seller/auctions"
           element={
-            <ProductedRoute roles={["seller"]}>
+            <ProductedRoutes roles={["seller"]}>
               <SellerAuctions />
-            </ProductedRoute>
+            </ProductedRoutes>
           }
         />
 
@@ -68,18 +69,18 @@ function App() {
         <Route
           path="/seller/products"
           element={
-            <ProductedRoute roles={["seller"]}>
+            <ProductedRoutes roles={["seller"]}>
               <MyProducts />
-            </ProductedRoute>
+            </ProductedRoutes>
           }
         />
 
         <Route
           path="/seller/create-product"
           element={
-            <ProductedRoute roles={["seller"]}>
+            <ProductedRoutes roles={["seller"]}>
               <CreateProduct />
-            </ProductedRoute>
+            </ProductedRoutes>
           }
         />
         
@@ -87,9 +88,9 @@ function App() {
         <Route
           path="/seller/edit-product/:id"
           element={
-            <ProductedRoute roles={["seller"]}>
+            <ProductedRoutes roles={["seller"]}>
               <EditProduct />
-            </ProductedRoute>
+            </ProductedRoutes>
           }
         />
 
@@ -99,18 +100,18 @@ function App() {
         <Route
           path="/buyer/profile"
           element={
-            <ProductedRoute roles={["buyer"]}>
+            <ProductedRoutes roles={["buyer"]}>
               <BuyerProfile />
-            </ProductedRoute>
+            </ProductedRoutes>
           }
         />
 
         <Route
           path="/bids/history"
           element={
-            <ProductedRoute roles={["buyer"]}>
+            <ProductedRoutes roles={["buyer"]}>
               <BidHistory />
-            </ProductedRoute>
+            </ProductedRoutes>
           }
         />
 

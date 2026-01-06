@@ -97,7 +97,7 @@ export default function Home() {
         {/* CTA BUTTONS */}
         <div className="flex gap-6 mt-10">
           <Link
-            to="/"
+            to="/buyer/auctions"
             className="liquid-btn magnetic-btn px-8 py-3 bg-red-400 text-black font-bold rounded-xl shadow-xl hover:bg-blue-400 transition"
           >
             🔥 Explore Auctions

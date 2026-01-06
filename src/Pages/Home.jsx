@@ -103,6 +103,7 @@ export default function Home() {
             🔥 Explore Auctions
           </Link>
 
+          
           {!user && (
             <Link
               to="/register"

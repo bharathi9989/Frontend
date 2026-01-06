@@ -54,7 +54,6 @@ export default function CreateProduct() {
       const res = await api.post("/products", fd, {
         headers: {
           Authorization: `Bearer ${token}`,
-          "Content-Type": "multipart/form-data",
         },
       });
 

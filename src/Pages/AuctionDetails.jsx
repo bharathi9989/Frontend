@@ -290,7 +290,7 @@ export default function AuctionDetails() {
 
         {/* RIGHT */}
         <aside className="bg-[#0b0b0b]/70 p-6 border border-yellow-900 rounded-xl">
-          <div className="text-sm text-yellow-100/70">Minimum Required</div>
+          <div className="text-sm text-red-100/70">Minimum Required</div>
           <div className="text-3xl font-bold text-yellow-300">
             ₹{minRequired}
           </div>

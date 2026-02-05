@@ -152,7 +152,7 @@ export default function CreateProduct() {
             <button
               type="button"
               onClick={() => navigate(-1)}
-              className="px-4 py-2 bg-white/5 rounded"
+              className="px-4 py-2 bg-white/6 rounded"
             >
               Cancel
             </button>

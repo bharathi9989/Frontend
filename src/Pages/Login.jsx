@@ -50,7 +50,7 @@ function Login() {
           }}
         />
       ))}
-      <div className="min-h-screen bg-black via-gray-500 to-white/15 flex items-center justify-center p-6 ">
+      <div className="min-h-screen bg-gray-500 via-gray-500 to-white/15 flex items-center justify-center p-6 ">
         <div className="w-full max-w-md max-h-max bg-white/10 backdrop-blur-xl border border-white/20 shadow-2xl rounded-3xl p-8 animate-fadeIn">
           <div className="neon-streak" style={{ top: "20%" }} />
           {/* ✨ PARTICLES */}
